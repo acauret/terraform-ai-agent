@@ -103,8 +103,9 @@ class AzureTerraformAgent:
         # Check for specific resource types
         is_resource_group_request = "resource group" in user_input.lower()
         is_storage_account_request = "storage account" in user_input.lower() or "storage accounts" in user_input.lower()
+        is_key_vault_request = "key vault" in user_input.lower() or "keyvault" in user_input.lower()
         
-        # For resource groups and storage accounts, we directly get the tfvars
+        # For specific resource types, we directly get the tfvars
         if is_resource_group_request:
             # For resource groups, get both the main config and tfvars
             configs = self.rag_engine._generate_resource_group_config(user_input)
@@ -113,6 +114,10 @@ class AzureTerraformAgent:
             # For storage accounts, get both the main config and tfvars
             configs = self.rag_engine._generate_storage_account_config(user_input)
             return "# Storage account configuration will be in tfvars file", configs['tfvars']
+        elif is_key_vault_request:
+            # For Key Vaults, get both the main config and tfvars
+            configs = self.rag_engine._generate_key_vault_config(user_input)
+            return "# Key Vault configuration will be in tfvars file", configs['tfvars']
         else:
             # For other resources, use the standard flow
             terraform_code = self.rag_engine.generate_terraform(user_input)
@@ -198,13 +203,7 @@ def azure_terraform_chat():
     - Storage Accounts
     - Virtual Networks
     - Load Balancers
-    
-    **Example Queries:**
-    - "Create a resource group called 'my-project' in East US"
-    - "Create a virtual machine with 2 cores and attached storage"
-    - "Set up an AKS cluster with 3 nodes and a load balancer"
-    - "Deploy a storage account with private endpoints and network rules"
-    - "Create a virtual network with two subnets for web and database tiers"
+    - Key Vaults
     """)
     
     try:
@@ -213,14 +212,43 @@ def azure_terraform_chat():
         st.error(f"Failed to initialize Azure Terraform Agent: {str(e)}")
         st.stop()
     
+    # Store generated configurations to avoid regenerating on download
+    if "current_terraform_code" not in st.session_state:
+        st.session_state.current_terraform_code = ""
+    if "current_tfvars_content" not in st.session_state:
+        st.session_state.current_tfvars_content = ""
+    
+    # Always display download buttons for the latest configuration if available
+    if st.session_state.current_terraform_code and st.session_state.current_tfvars_content:
+        st.sidebar.markdown("### Download Files")
+        st.sidebar.download_button(
+            label="Download Resources",
+            data=st.session_state.current_terraform_code,
+            file_name="resources.tf",
+            mime="text/plain",
+            key="sidebar_resources"
+        )
+        st.sidebar.download_button(
+            label="Download Main Config",
+            data=agent.get_main_tf_content(),
+            file_name="main.tf",
+            mime="text/plain",
+            key="sidebar_main"
+        )
+        st.sidebar.download_button(
+            label="Download Variables",
+            data=st.session_state.current_tfvars_content,
+            file_name="terraform.tfvars",
+            mime="text/plain",
+            key="sidebar_tfvars"
+        )
+    
     # Add base main.tf download option
-    with st.expander("📄 Base Terraform Configuration"):
+    with st.sidebar.expander("📄 Base Terraform Configuration"):
         st.markdown("Download the base Terraform configuration with provider setup and variable declarations.")
-        main_tf_content = agent.get_main_tf_content()
-        st.code(main_tf_content, language='hcl')
         st.download_button(
             label="Download Base Configuration",
-            data=main_tf_content,
+            data=agent.get_main_tf_content(),
             file_name="main.tf",
             mime="text/plain",
             key="download_base_expander"
@@ -246,48 +274,18 @@ def azure_terraform_chat():
                 # Generate Terraform code
                 terraform_code, tfvars_content = agent.generate_terraform(prompt)
                 
+                # Store the generated configurations
+                st.session_state.current_terraform_code = terraform_code
+                st.session_state.current_tfvars_content = tfvars_content
+                
                 # Display generated code
                 with st.chat_message("assistant"):
                     st.markdown("### Generated Terraform Configuration")
                     st.code(terraform_code, language='hcl')
                     
-                    # Add download options section
-                    st.markdown("### Download Files")
-                    
                     # Display tfvars content
-                    st.markdown("#### Variable Values (terraform.tfvars)")
+                    st.markdown("### Variable Values (terraform.tfvars)")
                     st.code(tfvars_content, language='hcl')
-                    
-                    # Create 3 columns for download buttons
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.download_button(
-                            label="Download Resources",
-                            data=terraform_code,
-                            file_name="resources.tf",
-                            mime="text/plain",
-                            key=f"download_resources_{len(st.session_state.messages)}"
-                        )
-                    
-                    with col2:
-                        # Offer the base main.tf
-                        st.download_button(
-                            label="Download Main Config",
-                            data=agent.get_main_tf_content(),
-                            file_name="main.tf",
-                            mime="text/plain",
-                            key=f"download_base_{len(st.session_state.messages)}"
-                        )
-                    
-                    with col3:
-                        # Offer the tfvars file
-                        st.download_button(
-                            label="Download Variables",
-                            data=tfvars_content,
-                            file_name="terraform.tfvars",
-                            mime="text/plain",
-                            key=f"download_tfvars_{len(st.session_state.messages)}"
-                        )
                     
                     st.session_state.messages.append({
                         "role": "assistant",
@@ -296,7 +294,7 @@ def azure_terraform_chat():
                     
                     st.info("""
                     To use this configuration:
-                    1. Download all three files (main.tf, resources.tf, and terraform.tfvars)
+                    1. Download all three files from the sidebar (main.tf, resources.tf, and terraform.tfvars)
                     2. Place them in the same directory
                     3. Customize the terraform.tfvars file with your actual values
                     4. Initialize Terraform: `terraform init`
@@ -315,6 +313,7 @@ def azure_terraform_chat():
                     - Storage Accounts
                     - Virtual Networks
                     - Load Balancers
+                    - Key Vaults
                     """)
                     st.session_state.messages.append({
                         "role": "assistant",
