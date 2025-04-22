@@ -354,6 +354,73 @@ class TerraformRAGEngine:
             st.error(f"Error generating storage account configuration: {str(e)}")
             raise Exception(f"Failed to generate storage account configuration: {str(e)}")
 
+    def _generate_key_vault_config(self, query: str) -> str:
+        """Generate Terraform configuration specifically for Key Vaults using a prompt file."""
+        try:
+            # Load the Key Vault prompt file
+            prompt_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'key_vault_prompt.txt')
+            try:
+                with open(prompt_file_path, 'r') as f:
+                    system_prompt = f.read()
+            except Exception as e:
+                st.error(f"Error reading Key Vault prompt file: {str(e)}")
+                system_prompt = "Generate Terraform code for Azure Key Vaults."
+            
+            # Create the user prompt with the original query
+            user_prompt = query
+            
+            # Generate the Terraform configuration using the LLM
+            try:
+                response = self.llm.invoke(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                )
+                
+                # The response should be the raw tfvars content without any markdown
+                tfvars = response.content.strip()
+                
+                # Validate that the response contains the expected format
+                if not tfvars.startswith("key_vault"):
+                    # Attempt to extract just the content if it's wrapped in markdown
+                    import re
+                    match = re.search(r'```(?:hcl)?\s*(key_vault.*?)\s*```', tfvars, re.DOTALL)
+                    if match:
+                        tfvars = match.group(1).strip()
+                    else:
+                        # Fall back to a template if the format is incorrect
+                        tfvars = """key_vault = {
+  kv-default = {
+    name               = "kv-default"
+    resource_group_key = "rg01"
+
+    private_endpoints = {
+      vault = {
+        subresource_name = "vault"
+      }
+    }
+    network_acls        = {}
+    diagnostic_settings = {}
+
+    role_assignments = {}
+  }
+}"""
+                
+                # For Key Vaults, we only need the tfvars file
+                return {
+                    "main_config": "",  # No main.tf needed
+                    "tfvars": tfvars
+                }
+                
+            except Exception as e:
+                st.error(f"Error generating Key Vault config with LLM: {str(e)}")
+                raise Exception(f"Failed to generate Key Vault configuration: {str(e)}")
+            
+        except Exception as e:
+            st.error(f"Error generating Key Vault configuration: {str(e)}")
+            raise Exception(f"Failed to generate Key Vault configuration: {str(e)}")
+
     def generate_terraform(self, query: str) -> str:
         """Generate Terraform configuration using RAG."""
         try:
@@ -368,6 +435,9 @@ class TerraformRAGEngine:
             # Check if this is a storage account request
             is_storage_account_request = "storage account" in query.lower() or "storage accounts" in query.lower()
             
+            # Check if this is a Key Vault request
+            is_key_vault_request = "key vault" in query.lower() or "keyvault" in query.lower()
+            
             # Handling resource group requests directly with the prompt-based approach
             if is_resource_group_request:
                 # For resource groups, we only need the tfvars file
@@ -379,6 +449,13 @@ class TerraformRAGEngine:
             elif is_storage_account_request:
                 # For storage accounts, we only need the tfvars file
                 configs = self._generate_storage_account_config(query)
+                # Return the tfvars content only
+                return configs['tfvars']
+                
+            # Handling Key Vault requests with the prompt-based approach
+            elif is_key_vault_request:
+                # For Key Vaults, we only need the tfvars file
+                configs = self._generate_key_vault_config(query)
                 # Return the tfvars content only
                 return configs['tfvars']
                 

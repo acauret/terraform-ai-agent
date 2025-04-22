@@ -55,3 +55,8 @@ terraform.rc
 .Trashes
 ehthumbs.db
 Thumbs.db 
+db/chroma.sqlite3
+db/74358f24-41ec-4c85-8df2-6c5c2c3e1387/data_level0.bin
+db/74358f24-41ec-4c85-8df2-6c5c2c3e1387/header.bin
+db/74358f24-41ec-4c85-8df2-6c5c2c3e1387/length.bin
+db/74358f24-41ec-4c85-8df2-6c5c2c3e1387/link_lists.bin
