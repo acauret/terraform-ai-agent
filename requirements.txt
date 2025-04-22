@@ -4,5 +4,6 @@ openai>=1.0
 python-dotenv>=0.19
 langchain>=0.1.0
 langchain-openai>=0.0.2
+langchain-core>=0.1.0
 chromadb>=0.4.22
 tiktoken>=0.5.2 

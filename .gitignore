@@ -44,7 +44,6 @@ wheels/
 .terraform/
 *.tfstate
 *.tfstate.*
-*.tfvars
 .terraformrc
 terraform.rc
 
