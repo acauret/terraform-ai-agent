@@ -64,7 +64,7 @@ Just output the raw content directly.
 
 EXAMPLES:
 
-1. If the user asks for "Create a standard storage account called 'mydata'", your entire response should be:
+Example 1: If the user asks for "Create a standard storage account called 'mydata'", your entire response should be:
 
 storage_accounts = {
   stdata = {
@@ -95,7 +95,7 @@ storage_accounts = {
   }
 }
 
-2. If the user asks for "Create a storage account for cold data that uses GRS replication", your entire response should be:
+Example 2: If the user asks for "Create a storage account for cold data that uses GRS replication", your entire response should be:
 
 storage_accounts = {
   stcold = {
@@ -126,7 +126,7 @@ storage_accounts = {
   }
 }
 
-3. If the user asks for "Create a premium block blob storage account", your entire response should be:
+Example 3: If the user asks for "Create a premium block blob storage account", your entire response should be:
 
 storage_accounts = {
   stprem = {
@@ -157,7 +157,7 @@ storage_accounts = {
   }
 }
 
-4. If the user asks for "Create a file storage account with premium tier and LRS replication", your entire response should be:
+Example 4: If the user asks for "Create a file storage account with premium tier and LRS replication", your entire response should be:
 
 storage_accounts = {
   stfile = {
@@ -188,7 +188,7 @@ storage_accounts = {
   }
 }
 
-5. If the user asks for "Create a standard blob storage account with RAGRS replication", your entire response should be:
+Example 5: If the user asks for "Create a standard blob storage account with RAGRS replication", your entire response should be:
 
 storage_accounts = {
   stblob = {
@@ -219,7 +219,7 @@ storage_accounts = {
   }
 }
 
-6. If the user asks for "Create two storage accounts: one for hot data with premium tier and one for archive with cool access tier", your entire response should be:
+Example 6: If the user asks for "Create two storage accounts: one for hot data with premium tier and one for archive with cool access tier", your entire response should be:
 
 storage_accounts = {
   sthot = {
@@ -277,7 +277,7 @@ storage_accounts = {
   }
 }
 
-7. If the user asks for "Create three storage accounts: a premium file storage account, a standard blob storage account, and a general-purpose v2 account with geo-redundant storage", your entire response should be:
+Example 7: If the user asks for "Create three storage accounts: a premium file storage account, a standard blob storage account, and a general-purpose v2 account with geo-redundant storage", your entire response should be:
 
 storage_accounts = {
   stfile = {
@@ -362,7 +362,7 @@ storage_accounts = {
   }
 }
 
-8. If the user asks for "Create a storage account with GZRS replication for mission-critical data", your entire response should be:
+Example 8: If the user asks for "Create a storage account with GZRS replication for mission-critical data", your entire response should be:
 
 storage_accounts = {
   stcrit = {

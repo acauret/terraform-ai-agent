@@ -6,12 +6,42 @@ INSTRUCTIONS:
 2. Use EXACTLY the following structure with resource_groups as a map object.
 3. Create resource group entries for EACH resource group mentioned in the user request.
 4. Use "rg01", "rg02", etc. as the keys for each resource group.
-5. Include an empty role_assignments map for each resource group.
-6. Follow the EXACT formatting, spacing and structure shown in the example.
-7. DO NOT add additional variables or fields.
-8. DO NOT omit any fields shown in the example.
-9. DO NOT add any markdown code formatting - ONLY output the raw tfvars content.
-10. If the user mentions multiple resource groups, create an entry for each one.
+5. Include an empty role_assignments map for each resource group, as default.
+6. If role assignments are needed, include them in the role_assignments map following this format:
+   role_assignments = {
+     group-name = {
+       resourcename               = "group-name"
+       role_definition_id_or_name = "Role Name" 
+       principal_id               = "group-name"
+     }
+   }
+   Note: A matching entry must exist in the entra_groups.tfvars file with the same group name.
+
+IMPORTANT: When role assignments are requested, TWO files must be created:
+1. The resource group tfvars file with the role_assignments block
+2. An entra_groups.tfvars file containing:
+   entra_groups = {
+     group-name = {
+       display_name = "group-name"
+       description  = "Role description for resource group"
+       owners       = ["owner-object-id"]
+     }
+   }
+
+EXAMPLE FORMAT FOR ENTRA_GROUPS.TFVARS (follow this EXACTLY when role assignments are needed):
+entra_groups = {
+  group-name = {
+    display_name = "group-name"
+    description  = "Role description for resource group"
+    owners       = ["owner-object-id"]
+  }
+}
+
+7. Follow the EXACT formatting, spacing and structure shown in the example.
+8. DO NOT add additional variables or fields.
+9. DO NOT omit any fields shown in the example.
+10. DO NOT add any markdown code formatting - ONLY output the raw tfvars content.
+11. If the user mentions multiple resource groups, create an entry for each one.
 
 EXAMPLE FORMAT (follow this EXACTLY):
 
@@ -38,7 +68,7 @@ Just output the raw content directly.
 
 EXAMPLES:
 
-1. If the user asks for "Create a resource group called 'my-project' in East US", your entire response should be:
+Example 1: If the user asks for "Create a resource group called 'my-project' in East US", your entire response should be:
 
 resource_groups = {
   # Resource group details
@@ -49,7 +79,7 @@ resource_groups = {
   }
 }
 
-2. If the user asks for "Create two resource groups: 'frontend-rg' in West US and 'backend-rg' in East US", your entire response should be:
+Example 2: If the user asks for "Create two resource groups: 'frontend-rg' in West US and 'backend-rg' in East US", your entire response should be:
 
 resource_groups = {
   # Frontend resource group
@@ -64,5 +94,32 @@ resource_groups = {
     name     = "backend-rg"
     location = "eastus"
     role_assignments = {}
+  }
+}
+
+Example 3: If the user asks for "Create a resource group called 'my-project' in East US with role assignments", your entire response should be TWO files:
+
+1. resource_groups.tfvars:
+resource_groups = {
+  # Resource group details
+  rg01 = {
+    name     = "my-project"
+    location = "eastus"
+    role_assignments = {
+      my-project-group = {
+        resourcename               = "my-project-group"
+        role_definition_id_or_name = "Contributor"
+        principal_id               = "my-project-group"
+      }
+    }
+  }
+}
+
+2. entra_groups.tfvars:
+entra_groups = {
+  my-project-group = {
+    display_name = "my-project-group"
+    description  = "Contributor role for my-project resource group"
+    owners       = ["00000000-0000-0000-0000-000000000000"]
   }
 }
