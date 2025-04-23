@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from rag_engine import TerraformRAGEngine
 from openai import AzureOpenAI
 from langchain.prompts import ChatPromptTemplate
+import base64
+import pyperclip
 
 # Set page config first
 st.set_page_config(
@@ -189,6 +191,42 @@ location = "{location}"
             st.error(f"Error reading main.tf: {str(e)}")
             return "# Error loading main.tf template"
 
+# Define copy functions for the clipboard
+def copy_to_clipboard(text):
+    """Copy text to clipboard using pyperclip with JavaScript fallback"""
+    try:
+        # Try to use pyperclip first
+        pyperclip.copy(text)
+        st.toast("Copied to clipboard successfully!", icon="✅")
+    except Exception as e:
+        # Fallback to JavaScript method
+        escaped_text = text.replace('`', '\\`').replace('$', '\\$').replace('{', '\\{').replace('}', '\\}')
+        js_code = f"""
+        <script>
+        function copyToClipboard() {{
+            const textArea = document.createElement('textarea');
+            textArea.value = `{escaped_text}`;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {{
+                document.execCommand('copy');
+                console.log('Copied to clipboard');
+            }} catch (err) {{
+                console.error('Failed to copy: ', err);
+            }}
+            document.body.removeChild(textArea);
+        }}
+        copyToClipboard();
+        </script>
+        """
+        st.components.v1.html(js_code, height=0)
+        st.toast("Copied to clipboard!", icon="✅")
+
+def get_download_link(content, filename):
+    """Create a download link for a text file"""
+    b64 = base64.b64encode(content.encode()).decode()
+    return f'<a href="data:file/txt;base64,{b64}" download="{filename}">Download {filename}</a>'
+
 # Streamlit UI Component
 def azure_terraform_chat():
     st.title("Azure Terraform Generator")
@@ -222,21 +260,23 @@ def azure_terraform_chat():
     if st.session_state.current_terraform_code and st.session_state.current_tfvars_content:
         st.sidebar.markdown("### Download Files")
         st.sidebar.download_button(
-            label="Download Resources",
+            label="📥 Download Resources",
             data=st.session_state.current_terraform_code,
             file_name="resources.tf",
             mime="text/plain",
             key="sidebar_resources"
         )
+        
         st.sidebar.download_button(
-            label="Download Main Config",
+            label="📥 Download Main Config",
             data=agent.get_main_tf_content(),
             file_name="main.tf",
             mime="text/plain",
             key="sidebar_main"
         )
+        
         st.sidebar.download_button(
-            label="Download Variables",
+            label="📥 Download Variables",
             data=st.session_state.current_tfvars_content,
             file_name="terraform.tfvars",
             mime="text/plain",
@@ -247,7 +287,7 @@ def azure_terraform_chat():
     with st.sidebar.expander("📄 Base Terraform Configuration"):
         st.markdown("Download the base Terraform configuration with provider setup and variable declarations.")
         st.download_button(
-            label="Download Base Configuration",
+            label="📥 Download Base Configuration",
             data=agent.get_main_tf_content(),
             file_name="main.tf",
             mime="text/plain",
@@ -281,11 +321,25 @@ def azure_terraform_chat():
                 # Display generated code
                 with st.chat_message("assistant"):
                     st.markdown("### Generated Terraform Configuration")
-                    st.code(terraform_code, language='hcl')
+                    
+                    # Create columns for the code and copy button
+                    code_col1, code_btn_col1 = st.columns([10, 1])
+                    with code_col1:
+                        st.code(terraform_code, language='hcl')
+                    with code_btn_col1:
+                        if st.button("📋", key="copy_code_inline", help="Copy to clipboard"):
+                            copy_to_clipboard(terraform_code)
                     
                     # Display tfvars content
                     st.markdown("### Variable Values (terraform.tfvars)")
-                    st.code(tfvars_content, language='hcl')
+                    
+                    # Create columns for the tfvars and copy button
+                    code_col2, code_btn_col2 = st.columns([10, 1])
+                    with code_col2:
+                        st.code(tfvars_content, language='hcl')
+                    with code_btn_col2:
+                        if st.button("📋", key="copy_tfvars_inline", help="Copy to clipboard"):
+                            copy_to_clipboard(tfvars_content)
                     
                     st.session_state.messages.append({
                         "role": "assistant",
