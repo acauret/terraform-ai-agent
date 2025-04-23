@@ -293,11 +293,22 @@ class TerraformRAGEngine:
             
             # Skip LLM call and manually generate groups for consistency and reliability
             debug_print("Generating Entra groups manually for guaranteed format")
-            groups_content = []
+            
+            # Use a dictionary to track unique groups by name to prevent duplicates
+            unique_groups = {}
             for group_key, group_name, role in groups:
+                if group_name not in unique_groups:
+                    unique_groups[group_name] = {
+                        "name": group_name,
+                        "role": role
+                    }
+            
+            # Generate content only for unique groups
+            groups_content = []
+            for group_name, group_info in unique_groups.items():
                 groups_content.append(f"""  {group_name} = {{
     display_name = "{group_name}"
-    description  = "{role} role for {group_name}"
+    description  = "{group_info['role']} role for {group_name}"
     owners       = ["00000000-0000-0000-0000-000000000000"]
   }}""")
                 

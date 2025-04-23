@@ -26,6 +26,18 @@ def debug_print(*args, **kwargs):
     if st.session_state.debug_mode:
         st.write(*args, **kwargs)
 
+# Add debug mode toggle at the very top of the sidebar, before everything else
+with st.sidebar:
+    # Add the debug mode toggle before any other content
+    debug_mode = st.toggle("🛠️ Debug Mode", value=st.session_state.debug_mode, 
+                          help="Toggle debug information display")
+    # Update session state if the toggle changes
+    if debug_mode != st.session_state.debug_mode:
+        st.session_state.debug_mode = debug_mode
+        st.rerun()
+    # Add a separator after the toggle
+    st.markdown("---")
+
 # Create a collapsible section for environment configuration
 with st.sidebar.expander("⚙️ Environment", expanded=False):
     col1, col2 = st.columns([5, 1])
@@ -307,6 +319,19 @@ def azure_terraform_chat():
                 st.session_state.current_tfvars_filename = "terraform.tfvars"
                 st.rerun()
     
+    # Very minimal chat styling
+    minimal_chat_style = """
+    <style>
+        /* Slightly enhanced message backgrounds */
+        [data-testid="stChatMessage"] {
+            background-color: #f9f9f9 !important;
+            border: none !important;
+            padding: 0.5rem !important;
+        }
+    </style>
+    """
+    st.markdown(minimal_chat_style, unsafe_allow_html=True)
+    
     st.markdown("""
     This tool helps you generate Terraform configurations for Azure infrastructure using AI.
     Simply describe your infrastructure needs, and the AI will generate the appropriate Terraform code.
@@ -326,18 +351,6 @@ def azure_terraform_chat():
     except Exception as e:
         st.error(f"Failed to initialize Azure Terraform Agent: {str(e)}")
         st.stop()
-    
-    # Add debug mode toggle to the sidebar
-    with st.sidebar:
-        # Add a horizontal line for separation
-        st.markdown("---")
-        # Add the debug mode toggle
-        debug_mode = st.toggle("🛠️ Debug Mode", value=st.session_state.debug_mode, 
-                              help="Toggle debug information display")
-        # Update session state if the toggle changes
-        if debug_mode != st.session_state.debug_mode:
-            st.session_state.debug_mode = debug_mode
-            st.rerun()
     
     # Store generated configurations to avoid regenerating on download
     if "current_terraform_code" not in st.session_state:
