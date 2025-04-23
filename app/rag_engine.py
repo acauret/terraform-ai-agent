@@ -1,6 +1,7 @@
 import os
 from typing import List, Dict, Tuple
 import streamlit as st
+import dotenv
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings
@@ -10,6 +11,9 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 import re  # Move re import to the top of the file
+
+# Load environment variables from .env file
+dotenv.load_dotenv()
 
 class TerraformRAGEngine:
     def __init__(self, template_dir: str):
@@ -117,20 +121,47 @@ class TerraformRAGEngine:
         documents = []
         tfvars_files = {}
         
+        # Define a local debug function
+        def debug_print(*args, **kwargs):
+            if hasattr(st.session_state, 'debug_mode') and st.session_state.debug_mode:
+                st.write(*args, **kwargs)
+        
+        # Debug information about the template directory
+        debug_print(f"Loading templates from directory: {self.template_dir}")
+        if not os.path.exists(self.template_dir):
+            st.error(f"Templates directory does not exist: {self.template_dir}")
+            return documents
+            
+        # List the contents of the directory to help debug
+        try:
+            files_in_dir = os.listdir(self.template_dir)
+            debug_print(f"Files found in templates directory: {files_in_dir}")
+            if not files_in_dir:
+                st.error(f"Templates directory is empty: {self.template_dir}")
+                return documents
+        except Exception as e:
+            st.error(f"Error listing files in templates directory: {str(e)}")
+            return documents
+        
         # First, load all .tfvars files and associate them with their template types
-        for filename in os.listdir(self.template_dir):
+        for filename in files_in_dir:
             if filename.endswith('.tfvars'):
                 template_type = filename.replace('.tfvars', '')
                 file_path = os.path.join(self.template_dir, filename)
-                with open(file_path, 'r') as f:
-                    tfvars_files[template_type] = f.read()
+                try:
+                    with open(file_path, 'r') as f:
+                        tfvars_files[template_type] = f.read()
+                    debug_print(f"Loaded .tfvars file: {filename}")
+                except Exception as e:
+                    st.error(f"Error reading .tfvars file {filename}: {str(e)}")
         
         # Then load all .tf files, attaching associated .tfvars content if available
-        for filename in os.listdir(self.template_dir):
+        for filename in files_in_dir:
             if filename.endswith('.tf'):
                 file_path = os.path.join(self.template_dir, filename)
-                with open(file_path, 'r') as f:
-                    content = f.read()
+                try:
+                    with open(file_path, 'r') as f:
+                        content = f.read()
                     
                     # Store the template type in metadata
                     template_type = filename.replace('.tf', '')
@@ -150,6 +181,11 @@ class TerraformRAGEngine:
                         metadata=metadata
                     )
                     documents.append(doc)
+                    debug_print(f"Loaded .tf file: {filename}")
+                except Exception as e:
+                    st.error(f"Error reading .tf file {filename}: {str(e)}")
+        
+        debug_print(f"Total documents loaded: {len(documents)}")
         return documents
 
     def _initialize_vector_store(self):
@@ -160,8 +196,27 @@ class TerraformRAGEngine:
             os.makedirs(db_dir, exist_ok=True)
             
             documents = self._load_templates()
+            
+            # If no documents were loaded, raise an exception
+            if not documents:
+                raise ValueError("No template documents were loaded")
+                
+            # Check if embeddings are working properly
+            try:
+                test_result = self.embeddings.embed_query("test")
+                if not test_result or len(test_result) == 0:
+                    raise ValueError("Failed to generate embeddings - empty result")
+            except Exception as emb_error:
+                st.error(f"Embeddings test failed: {str(emb_error)}. Will use direct template access instead.")
+                self.vector_store = None
+                return
+                
             splits = self.text_splitter.split_documents(documents)
             
+            # If there are no splits, raise an exception
+            if not splits:
+                raise ValueError("No document splits were created")
+                
             # Use persistent storage for the vector database
             # Chroma 0.4.x+ automatically persists documents
             self.vector_store = Chroma.from_documents(
@@ -172,16 +227,8 @@ class TerraformRAGEngine:
             
         except Exception as e:
             st.error(f"Error initializing vector store: {str(e)}")
-            # Fallback to in-memory storage if persistent storage fails
-            try:
-                documents = self._load_templates()
-                splits = self.text_splitter.split_documents(documents)
-                self.vector_store = Chroma.from_documents(
-                    documents=splits,
-                    embedding=self.embeddings
-                )
-            except Exception as inner_e:
-                raise ValueError(f"Failed to initialize vector store: {str(inner_e)}")
+            # Set vector_store to None to indicate fallback mode
+            self.vector_store = None
 
     def _get_relevant_templates(self, query: str) -> List[str]:
         """Get relevant template types based on the query."""
@@ -674,7 +721,29 @@ class TerraformRAGEngine:
                     combined += f"# {config['type'].replace('_', ' ').title()} Configuration\n{config['content']}\n\n"
                 return combined.strip()
                 
-            # For other resources, get relevant template types
+            # For other resources, check if vector store is available
+            if self.vector_store is None:
+                st.warning("Vector store is not available. Using direct template approach.")
+                # If no specific resource type is identified and vector store is unavailable,
+                # fall back to a generic template with a message
+                fallback_message = """# Terraform configuration could not be generated using RAG
+# due to Vector Store initialization failure.
+# 
+# Your query: """ + f'"{query}"' + """
+#
+# Please try one of the specific resource types:
+# - Resource Groups
+# - Storage Accounts
+# - Key Vaults
+
+resource "azurerm_resource_group" "example" {
+  name     = "example-resource-group"
+  location = "West US"
+}
+"""
+                return fallback_message
+                
+            # For other resources with vector store available, get relevant template types
             relevant_types = self._get_relevant_templates(query)
             
             # Create a retriever that focuses on relevant templates

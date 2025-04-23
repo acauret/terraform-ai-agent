@@ -1,127 +1,87 @@
 # Terraform AI Agent
 
-An intelligent agent that generates Azure Terraform configurations using RAG (Retrieval Augmented Generation) and LangChain. The agent uses GPT-4o to understand infrastructure requirements and generate appropriate Terraform code based on validated templates.
+An AI-powered assistant that generates Terraform configurations for Azure resources based on natural language descriptions.
 
 ## Features
 
-- 🤖 AI-powered Terraform code generation
-- 📝 RAG-based approach using curated templates
-- ✅ Input validation and scope checking
-- 💬 Interactive chat interface
-- 🔍 Smart template selection
-- 📦 Supports multiple Azure resources
+- **Natural Language Interface**: Describe the Azure resources you want to create in plain English
+- **Multi-Resource Support**: Generate configurations for multiple resource types in a single request
+- **Role Assignment Handling**: Automatically generates Entra Groups for role assignments
+- **Interactive UI**: Chat-based interface with response history
+- **Downloadable Files**: Generated Terraform files can be downloaded directly
+- **Debug Mode**: Enable debug mode to see detailed information about the generation process
 
-### Supported Azure Resources
+## Supported Azure Resources
 
-- Virtual Machines
-- AKS (Azure Kubernetes Service)
+- Resource Groups
 - Storage Accounts
-- Virtual Networks
-- Load Balancers
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/milindkudapa/terraform-ai-agent.git
-cd terraform-ai-agent
-```
-
-2. Create and activate a virtual environment:
-```bash
-python -m venv terraform-agent-env
-source terraform-agent-env/bin/activate  # On Unix/macOS
-# OR
-terraform-agent-env\Scripts\activate  # On Windows
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-Create a `.env` file in the project root with:
-```
-OPENAI_API_KEY=your_api_key_here
-```
-
-## Usage
-
-1. Start the application:
-```bash
-streamlit run app/azure_terraform_agent.py
-```
-
-2. Enter your infrastructure requirements in natural language
-3. Review the generated Terraform configuration
-4. Download and use the generated configuration
+- Key Vaults
+- Entra ID Groups (automatically generated for role assignments)
 
 ## Example Queries
 
-- "Create a virtual machine with 2 cores and attached storage"
-- "Set up an AKS cluster with 3 nodes and a load balancer"
-- "Deploy a storage account with private endpoints and network rules"
-- "Create a virtual network with two subnets for web and database tiers"
+Here are some example queries you can try:
 
-## Project Structure
+- "Create a resource group called 'my-project' in East US with role assignments for admin and operator"
+- "I need a storage account with private endpoints and containers"
+- "Set up a key vault in West US"
+- "Create a resource group, a storage account, and a key vault with role assignments for developers"
 
-```
-terraform-ai-agent/
-├── app/
-│   ├── azure_terraform_agent.py  # Main application
-│   └── rag_engine.py            # RAG implementation
-├── templates/
-│   ├── vm.tf                    # VM template
-│   ├── aks.tf                   # AKS template
-│   ├── storage.tf               # Storage template
-│   ├── vnet.tf                  # VNet template
-│   └── lb.tf                    # Load Balancer template
-├── terraform/
-│   └── main.tf                  # Base Terraform configuration
-├── requirements.txt             # Python dependencies
-├── .env                         # Environment variables
-└── README.md                    # This file
-```
+## Installation
 
-## Technical Details
-
-### RAG Implementation
-- Uses LangChain for document processing and retrieval
-- Implements semantic search with ChromaDB
-- Template chunking with RecursiveCharacterTextSplitter
-- OpenAI embeddings for similarity search
-
-### Validation
-- Input validation using GPT-4
-- Scope checking against supported resources
-- Template relevance scoring
-
-## Dependencies
+### Prerequisites
 
 - Python 3.8+
-- streamlit>=1.22
-- langchain>=0.1.0
-- langchain-openai>=0.0.2
-- openai>=1.0
-- python-dotenv>=0.19
-- chromadb>=0.4.22
-- tiktoken>=0.5.2
+- Azure OpenAI API key
+
+### Environment Setup
+
+1. Clone this repository:
+   ```
+   git clone https://github.com/yourusername/terraform-ai-agent.git
+   cd terraform-ai-agent
+   ```
+
+2. Create a virtual environment:
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+4. Set up environment variables:
+   ```
+   export AZURE_OPENAI_API_KEY=your_api_key
+   export AZURE_OPENAI_ENDPOINT=your_endpoint
+   export AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=your_deployment_name
+   export AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=your_embedding_deployment_name
+   ```
+
+## Running the Application
+
+Start the Streamlit app:
+```
+streamlit run app/app.py
+```
+
+Then open your browser at `http://localhost:8501` to use the application.
+
+## How It Works
+
+1. The master agent analyzes your query to determine what Azure resources you need
+2. Specialized agents handle the generation of specific resource types
+3. If role assignments are detected, an Entra groups agent creates the necessary configurations
+4. All generated configurations are combined and presented to you
+5. You can download individual configuration files for use in your Terraform project
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License - feel free to use this project for any purpose.
-
-## Acknowledgments
-
-- OpenAI for GPT-4o
-- LangChain for the RAG framework
-- Streamlit for the UI framework 
+This project is licensed under the MIT License - see the LICENSE file for details. 
