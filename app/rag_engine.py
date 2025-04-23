@@ -230,9 +230,10 @@ class TerraformRAGEngine:
                 group_matches = re.finditer(group_pattern, role_assignments_content)
                 
                 for match in group_matches:
-                    group_name = match.group(1)
+                    group_key = match.group(1)  # The key in the role_assignments map
+                    group_name = match.group(2)  # The resourcename
                     role = match.group(3)  # role_definition_id_or_name
-                    groups.append((group_name, role))
+                    groups.append((group_key, group_name, role))
             
             if not groups:
                 # If no groups were found with the detailed pattern, try a simpler pattern
@@ -240,9 +241,13 @@ class TerraformRAGEngine:
                 group_matches = re.finditer(group_pattern, resource_group_tfvars, re.DOTALL)
                 
                 for match in group_matches:
-                    group_name = match.group(1)
+                    group_key = match.group(1)
+                    group_content = match.group(2)
                     role = match.group(3)
-                    groups.append((group_name, role))
+                    # Try to extract the resourcename
+                    name_match = re.search(r'resourcename\s*=\s*"([^"]+)"', group_content)
+                    group_name = name_match.group(1) if name_match else group_key
+                    groups.append((group_key, group_name, role))
             
             if not groups:
                 # If still no groups, try one more pattern
@@ -250,20 +255,22 @@ class TerraformRAGEngine:
                 group_matches = re.finditer(group_pattern, resource_group_tfvars, re.DOTALL)
                 
                 for match in group_matches:
+                    group_key = match.group(1)
                     group_content = match.group(2)
                     role_match = re.search(r'role_definition_id_or_name\s*=\s*"([^"]+)"', group_content)
-                    if role_match:
-                        group_name = match.group(1)
+                    name_match = re.search(r'resourcename\s*=\s*"([^"]+)"', group_content)
+                    if role_match and name_match:
                         role = role_match.group(1)
-                        groups.append((group_name, role))
+                        group_name = name_match.group(1)
+                        groups.append((group_key, group_name, role))
             
             if not groups:
                 # If still no groups, return empty configuration
-                return {"main_config": "", "tfvars": ""}
+                return {"main_config": "", "tfvars": "", "tfvars_filename": "entra_groups.auto.tfvars"}
             
             # Create the user prompt with all role assignments
             user_prompt = "Generate Entra groups for the following role assignments:\n"
-            for group_name, role in groups:
+            for group_key, group_name, role in groups:
                 user_prompt += f"- {group_name} ({role})\n"
             
             # Generate the Entra groups configuration using the LLM
@@ -287,10 +294,10 @@ class TerraformRAGEngine:
                     else:
                         # Fall back to generating groups manually if the format is incorrect
                         groups_content = []
-                        for group_name, role in groups:
-                            groups_content.append(f"""  {group_name} = {{
+                        for group_key, group_name, role in groups:
+                            groups_content.append(f"""  {group_key} = {{
     display_name = "{group_name}"
-    description  = "{role} role for {group_name.split('-')[0]} resource group"
+    description  = "{role} role for {group_name}"
     owners       = ["00000000-0000-0000-0000-000000000000"]
   }}""")
                         
@@ -299,7 +306,8 @@ class TerraformRAGEngine:
                 # For Entra groups, we only need the tfvars file
                 return {
                     "main_config": "",  # No main.tf needed
-                    "tfvars": tfvars
+                    "tfvars": tfvars,
+                    "tfvars_filename": "entra_groups.auto.tfvars"
                 }
                 
             except Exception as e:
