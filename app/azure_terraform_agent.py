@@ -107,24 +107,34 @@ class AzureTerraformAgent:
         is_storage_account_request = "storage account" in user_input.lower() or "storage accounts" in user_input.lower()
         is_key_vault_request = "key vault" in user_input.lower() or "keyvault" in user_input.lower()
         
+        # Determine the tfvars filename based on resource type
+        tfvars_filename = "terraform.tfvars"
+        
+        if is_resource_group_request:
+            tfvars_filename = "resource_group.auto.tfvars"
+        elif is_storage_account_request:
+            tfvars_filename = "storage_account.auto.tfvars"
+        elif is_key_vault_request:
+            tfvars_filename = "key_vault.auto.tfvars"
+        
         # For specific resource types, we directly get the tfvars
         if is_resource_group_request:
             # For resource groups, get both the main config and tfvars
             configs = self.rag_engine._generate_resource_group_config(user_input)
-            return "", configs['tfvars']
+            return "", configs['tfvars'], tfvars_filename
         elif is_storage_account_request:
             # For storage accounts, get both the main config and tfvars
             configs = self.rag_engine._generate_storage_account_config(user_input)
-            return "", configs['tfvars']
+            return "", configs['tfvars'], tfvars_filename
         elif is_key_vault_request:
             # For Key Vaults, get both the main config and tfvars
             configs = self.rag_engine._generate_key_vault_config(user_input)
-            return "", configs['tfvars']
+            return "", configs['tfvars'], tfvars_filename
         else:
             # For other resources, use the standard flow
             terraform_code = self.rag_engine.generate_terraform(user_input)
             tfvars_content = self._extract_variables(terraform_code)
-            return terraform_code, tfvars_content
+            return terraform_code, tfvars_content, tfvars_filename
     
     def _extract_variables(self, terraform_code: str) -> str:
         """Extract variables from Terraform code and create a tfvars file."""
@@ -230,6 +240,20 @@ def get_download_link(content, filename):
 # Streamlit UI Component
 def azure_terraform_chat():
     st.title("Azure Terraform Generator")
+    
+    # Add chat controls to the top-right corner
+    chat_control_container = st.container()
+    with chat_control_container:
+        col1, col2 = st.columns([9, 1])
+        with col2:
+            if st.button("🗑️ Clear Chat", key="clear_chat", help="Clear chat history"):
+                # Clear chat history and generated code
+                st.session_state.messages = []
+                st.session_state.current_terraform_code = ""
+                st.session_state.current_tfvars_content = ""
+                st.session_state.current_tfvars_filename = "terraform.tfvars"
+                st.rerun()
+    
     st.markdown("""
     This tool helps you generate Terraform configurations for Azure infrastructure using AI.
     Simply describe your infrastructure needs, and the AI will generate the appropriate Terraform code.
@@ -255,6 +279,12 @@ def azure_terraform_chat():
         st.session_state.current_terraform_code = ""
     if "current_tfvars_content" not in st.session_state:
         st.session_state.current_tfvars_content = ""
+    if "current_tfvars_filename" not in st.session_state:
+        st.session_state.current_tfvars_filename = "terraform.tfvars"
+    
+    # Initialize messages if not present
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
     
     # Always display download buttons for the latest configuration if available
     if st.session_state.current_terraform_code and st.session_state.current_tfvars_content:
@@ -278,7 +308,7 @@ def azure_terraform_chat():
         st.sidebar.download_button(
             label="📥 Download Variables",
             data=st.session_state.current_tfvars_content,
-            file_name="terraform.tfvars",
+            file_name=st.session_state.current_tfvars_filename,
             mime="text/plain",
             key="sidebar_tfvars"
         )
@@ -293,9 +323,6 @@ def azure_terraform_chat():
             mime="text/plain",
             key="download_base_expander"
         )
-    
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
     
     # Display chat history
     for message in st.session_state.messages:
@@ -312,42 +339,29 @@ def azure_terraform_chat():
         with st.spinner("Processing your request..."):
             try:
                 # Generate Terraform code
-                terraform_code, tfvars_content = agent.generate_terraform(prompt)
+                terraform_code, tfvars_content, tfvars_filename = agent.generate_terraform(prompt)
                 
                 # Store the generated configurations
                 st.session_state.current_terraform_code = terraform_code
                 st.session_state.current_tfvars_content = tfvars_content
+                st.session_state.current_tfvars_filename = tfvars_filename
                 
                 # Display generated code
                 with st.chat_message("assistant"):
                     # Only show the terraform configuration section if there's code to display
                     if terraform_code:
                         st.markdown("### Generated Terraform Configuration")
-                        
-                        # Create columns for the code and copy button
-                        code_col1, code_btn_col1 = st.columns([10, 1])
-                        with code_col1:
-                            st.code(terraform_code, language='hcl')
-                        with code_btn_col1:
-                            if st.button("📋", key="copy_code_inline", help="Copy to clipboard"):
-                                copy_to_clipboard(terraform_code)
+                        st.code(terraform_code, language='hcl')
                     
                     # Display tfvars content
-                    st.markdown("### Variable Values (terraform.tfvars)")
-                    
-                    # Create columns for the tfvars and copy button
-                    code_col2, code_btn_col2 = st.columns([10, 1])
-                    with code_col2:
-                        st.code(tfvars_content, language='hcl')
-                    with code_btn_col2:
-                        if st.button("📋", key="copy_tfvars_inline", help="Copy to clipboard"):
-                            copy_to_clipboard(tfvars_content)
+                    st.markdown(f"### Variable Values ({tfvars_filename})")
+                    st.code(tfvars_content, language='hcl')
                     
                     # Store only non-empty content in the chat history
                     content = ""
                     if terraform_code:
                         content += f"Generated Terraform Configuration:\n```hcl\n{terraform_code}\n```\n\n"
-                    content += f"Variable Values (terraform.tfvars):\n```hcl\n{tfvars_content}\n```"
+                    content += f"Variable Values ({tfvars_filename}):\n```hcl\n{tfvars_content}\n```"
                     
                     st.session_state.messages.append({
                         "role": "assistant",

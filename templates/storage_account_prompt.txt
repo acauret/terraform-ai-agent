@@ -14,11 +14,17 @@ INSTRUCTIONS:
    - account_kind: "StorageV2" (options: BlobStorage, BlockBlobStorage, FileStorage, Storage, StorageV2)
    - account_replication_type: "ZRS" (options: LRS, GRS, RAGRS, ZRS, GZRS, RAGZRS)
    - account_tier: "Standard" (options: Standard, Premium)
-9. Include an empty container map and an empty role_assignments map.
-10. Follow the EXACT formatting, spacing and structure shown in the example.
-11. DO NOT add additional variables or fields beyond what is shown in the example.
-12. DO NOT omit any fields shown in the example.
-13. DO NOT add any markdown code formatting - ONLY output the raw tfvars content.
+9. Include an empty container map and an empty role_assignments map, by default.
+10. If the user specifies containers, include them in the container map following this format:
+    container = {
+      container1 = {
+        name = "container1"
+      }
+    }
+11. Follow the EXACT formatting, spacing and structure shown in the example.
+12. DO NOT add additional variables or fields beyond what is shown in the example.
+13. DO NOT omit any fields shown in the example.
+14. DO NOT add any markdown code formatting - ONLY output the raw tfvars content.
 
 EXAMPLE FORMAT (follow this EXACTLY):
 
