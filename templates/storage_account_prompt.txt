@@ -5,7 +5,7 @@ INSTRUCTIONS:
 1. ONLY generate a terraform.tfvars file. DO NOT generate any other files.
 2. Use EXACTLY the following structure with storage_accounts as a map object.
 3. Create storage account entries for EACH storage account mentioned in the user request.
-4. Use short names like "st01", "st02", etc. or names based on the purpose (like "stdata") as the keys.
+4. Use short names like "st01", "st02", etc. or names based on the purpose (like "stdata") as the keys. Both the key and the name value (they must match exactly).
 5. Always set resource_group_key to "rg01" unless otherwise specified.
 6. Include all subresources (blob, queue, table, file) in the private_endpoints section.
 7. Include configurable properties: access_tier, account_kind, account_replication_type, account_tier.
