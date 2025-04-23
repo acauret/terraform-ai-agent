@@ -111,15 +111,15 @@ class AzureTerraformAgent:
         if is_resource_group_request:
             # For resource groups, get both the main config and tfvars
             configs = self.rag_engine._generate_resource_group_config(user_input)
-            return "# Resource group configuration will be in tfvars file", configs['tfvars']
+            return "", configs['tfvars']
         elif is_storage_account_request:
             # For storage accounts, get both the main config and tfvars
             configs = self.rag_engine._generate_storage_account_config(user_input)
-            return "# Storage account configuration will be in tfvars file", configs['tfvars']
+            return "", configs['tfvars']
         elif is_key_vault_request:
             # For Key Vaults, get both the main config and tfvars
             configs = self.rag_engine._generate_key_vault_config(user_input)
-            return "# Key Vault configuration will be in tfvars file", configs['tfvars']
+            return "", configs['tfvars']
         else:
             # For other resources, use the standard flow
             terraform_code = self.rag_engine.generate_terraform(user_input)
@@ -320,15 +320,17 @@ def azure_terraform_chat():
                 
                 # Display generated code
                 with st.chat_message("assistant"):
-                    st.markdown("### Generated Terraform Configuration")
-                    
-                    # Create columns for the code and copy button
-                    code_col1, code_btn_col1 = st.columns([10, 1])
-                    with code_col1:
-                        st.code(terraform_code, language='hcl')
-                    with code_btn_col1:
-                        if st.button("📋", key="copy_code_inline", help="Copy to clipboard"):
-                            copy_to_clipboard(terraform_code)
+                    # Only show the terraform configuration section if there's code to display
+                    if terraform_code:
+                        st.markdown("### Generated Terraform Configuration")
+                        
+                        # Create columns for the code and copy button
+                        code_col1, code_btn_col1 = st.columns([10, 1])
+                        with code_col1:
+                            st.code(terraform_code, language='hcl')
+                        with code_btn_col1:
+                            if st.button("📋", key="copy_code_inline", help="Copy to clipboard"):
+                                copy_to_clipboard(terraform_code)
                     
                     # Display tfvars content
                     st.markdown("### Variable Values (terraform.tfvars)")
@@ -341,20 +343,16 @@ def azure_terraform_chat():
                         if st.button("📋", key="copy_tfvars_inline", help="Copy to clipboard"):
                             copy_to_clipboard(tfvars_content)
                     
+                    # Store only non-empty content in the chat history
+                    content = ""
+                    if terraform_code:
+                        content += f"Generated Terraform Configuration:\n```hcl\n{terraform_code}\n```\n\n"
+                    content += f"Variable Values (terraform.tfvars):\n```hcl\n{tfvars_content}\n```"
+                    
                     st.session_state.messages.append({
                         "role": "assistant",
-                        "content": f"Generated Terraform Configuration:\n```hcl\n{terraform_code}\n```"
+                        "content": content
                     })
-                    
-                    st.info("""
-                    To use this configuration:
-                    1. Download all three files from the sidebar (main.tf, resources.tf, and terraform.tfvars)
-                    2. Place them in the same directory
-                    3. Customize the terraform.tfvars file with your actual values
-                    4. Initialize Terraform: `terraform init`
-                    5. Review the plan: `terraform plan`
-                    6. Apply the configuration: `terraform apply`
-                    """)
                     
             except ValueError as e:
                 with st.chat_message("assistant"):

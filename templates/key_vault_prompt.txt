@@ -13,6 +13,7 @@ INSTRUCTIONS:
 9. DO NOT add additional variables or fields beyond what is shown in the example.
 10. DO NOT omit any fields shown in the example.
 11. DO NOT add any markdown code formatting - ONLY output the raw tfvars content.
+12. Name and key should always beging with kv-. If the users does not supply it, always append the key and name with "kv-"
 
 EXAMPLE FORMAT (follow this EXACTLY):
 
