@@ -100,7 +100,7 @@ class AzureTerraformAgent:
 
     def generate_terraform(self, user_input: str) -> tuple:
         """Generate Terraform configuration using RAG approach.
-        Returns a tuple of (terraform_code, tfvars_content)
+        Returns a tuple of (terraform_code, tfvars_content, tfvars_filename)
         """
         # Check for specific resource types
         is_resource_group_request = "resource group" in user_input.lower()
@@ -121,20 +121,30 @@ class AzureTerraformAgent:
         if is_resource_group_request:
             # For resource groups, get both the main config and tfvars
             configs = self.rag_engine._generate_resource_group_config(user_input)
-            return "", configs['tfvars'], tfvars_filename
+            
+            # Check if we need to generate Entra groups
+            if "role_assignments" in configs['tfvars'] and "{}" not in configs['tfvars']:
+                # Generate Entra groups configuration
+                entra_configs = self.rag_engine._generate_entra_groups_config(configs['tfvars'])
+                return "", configs['tfvars'], tfvars_filename, entra_configs['tfvars']
+            
+            return "", configs['tfvars'], tfvars_filename, ""
+            
         elif is_storage_account_request:
             # For storage accounts, get both the main config and tfvars
             configs = self.rag_engine._generate_storage_account_config(user_input)
-            return "", configs['tfvars'], tfvars_filename
+            return "", configs['tfvars'], tfvars_filename, ""
+            
         elif is_key_vault_request:
             # For Key Vaults, get both the main config and tfvars
             configs = self.rag_engine._generate_key_vault_config(user_input)
-            return "", configs['tfvars'], tfvars_filename
+            return "", configs['tfvars'], tfvars_filename, ""
+            
         else:
             # For other resources, use the standard flow
             terraform_code = self.rag_engine.generate_terraform(user_input)
             tfvars_content = self._extract_variables(terraform_code)
-            return terraform_code, tfvars_content, tfvars_filename
+            return terraform_code, tfvars_content, tfvars_filename, ""
     
     def _extract_variables(self, terraform_code: str) -> str:
         """Extract variables from Terraform code and create a tfvars file."""
@@ -251,6 +261,7 @@ def azure_terraform_chat():
                 st.session_state.messages = []
                 st.session_state.current_terraform_code = ""
                 st.session_state.current_tfvars_content = ""
+                st.session_state.current_entra_tfvars_content = ""
                 st.session_state.current_tfvars_filename = "terraform.tfvars"
                 st.rerun()
     
@@ -279,6 +290,8 @@ def azure_terraform_chat():
         st.session_state.current_terraform_code = ""
     if "current_tfvars_content" not in st.session_state:
         st.session_state.current_tfvars_content = ""
+    if "current_entra_tfvars_content" not in st.session_state:
+        st.session_state.current_entra_tfvars_content = ""
     if "current_tfvars_filename" not in st.session_state:
         st.session_state.current_tfvars_filename = "terraform.tfvars"
     
@@ -312,6 +325,15 @@ def azure_terraform_chat():
             mime="text/plain",
             key="sidebar_tfvars"
         )
+        
+        if st.session_state.current_entra_tfvars_content:
+            st.sidebar.download_button(
+                label="📥 Download Entra Groups",
+                data=st.session_state.current_entra_tfvars_content,
+                file_name="entra_groups.auto.tfvars",
+                mime="text/plain",
+                key="sidebar_entra"
+            )
     
     # Add base main.tf download option
     with st.sidebar.expander("📄 Base Terraform Configuration"):
@@ -339,12 +361,13 @@ def azure_terraform_chat():
         with st.spinner("Processing your request..."):
             try:
                 # Generate Terraform code
-                terraform_code, tfvars_content, tfvars_filename = agent.generate_terraform(prompt)
+                terraform_code, tfvars_content, tfvars_filename, entra_configs = agent.generate_terraform(prompt)
                 
                 # Store the generated configurations
                 st.session_state.current_terraform_code = terraform_code
                 st.session_state.current_tfvars_content = tfvars_content
                 st.session_state.current_tfvars_filename = tfvars_filename
+                st.session_state.current_entra_tfvars_content = entra_configs
                 
                 # Display generated code
                 with st.chat_message("assistant"):
@@ -357,11 +380,18 @@ def azure_terraform_chat():
                     st.markdown(f"### Variable Values ({tfvars_filename})")
                     st.code(tfvars_content, language='hcl')
                     
+                    # Display Entra groups content if available
+                    if entra_configs:
+                        st.markdown("### Entra Groups Configuration")
+                        st.code(entra_configs, language='hcl')
+                    
                     # Store only non-empty content in the chat history
                     content = ""
                     if terraform_code:
                         content += f"Generated Terraform Configuration:\n```hcl\n{terraform_code}\n```\n\n"
                     content += f"Variable Values ({tfvars_filename}):\n```hcl\n{tfvars_content}\n```"
+                    if entra_configs:
+                        content += f"\n\nEntra Groups Configuration:\n```hcl\n{entra_configs}\n```"
                     
                     st.session_state.messages.append({
                         "role": "assistant",

@@ -204,7 +204,113 @@ class TerraformRAGEngine:
             st.error(f"Error in template selection: {str(e)}")
             return ["virtual_machine"]  # Default to basic resources on error
 
-    def _generate_resource_group_config(self, query: str) -> str:
+    def _generate_entra_groups_config(self, resource_group_tfvars: str) -> Dict[str, str]:
+        """Generate Terraform configuration for Entra ID groups based on role assignments in resource groups."""
+        try:
+            # Load the Entra groups prompt file
+            prompt_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'entra_groups_prompt.txt')
+            try:
+                with open(prompt_file_path, 'r') as f:
+                    system_prompt = f.read()
+            except Exception as e:
+                st.error(f"Error reading Entra groups prompt file: {str(e)}")
+                system_prompt = "Generate Terraform code for Azure Entra ID groups."
+            
+            # Extract role assignments from the resource group tfvars
+            import re
+            groups = []
+            
+            # First, try to find the role_assignments block
+            role_assignments_match = re.search(r'role_assignments\s*=\s*{([^}]*)}', resource_group_tfvars, re.DOTALL)
+            if role_assignments_match:
+                role_assignments_content = role_assignments_match.group(1)
+                
+                # Now find all group blocks within the role_assignments
+                group_pattern = r'(\w+)\s*=\s*{\s*resourcename\s*=\s*"([^"]+)"\s*role_definition_id_or_name\s*=\s*"([^"]+)"\s*principal_id\s*=\s*"([^"]+)"\s*}'
+                group_matches = re.finditer(group_pattern, role_assignments_content)
+                
+                for match in group_matches:
+                    group_name = match.group(1)
+                    role = match.group(3)  # role_definition_id_or_name
+                    groups.append((group_name, role))
+            
+            if not groups:
+                # If no groups were found with the detailed pattern, try a simpler pattern
+                group_pattern = r'(\w+)\s*=\s*{([^}]*?role_definition_id_or_name\s*=\s*"([^"]+)"[^}]*)}'
+                group_matches = re.finditer(group_pattern, resource_group_tfvars, re.DOTALL)
+                
+                for match in group_matches:
+                    group_name = match.group(1)
+                    role = match.group(3)
+                    groups.append((group_name, role))
+            
+            if not groups:
+                # If still no groups, try one more pattern
+                group_pattern = r'(\w+)\s*=\s*{([^}]*)}'
+                group_matches = re.finditer(group_pattern, resource_group_tfvars, re.DOTALL)
+                
+                for match in group_matches:
+                    group_content = match.group(2)
+                    role_match = re.search(r'role_definition_id_or_name\s*=\s*"([^"]+)"', group_content)
+                    if role_match:
+                        group_name = match.group(1)
+                        role = role_match.group(1)
+                        groups.append((group_name, role))
+            
+            if not groups:
+                # If still no groups, return empty configuration
+                return {"main_config": "", "tfvars": ""}
+            
+            # Create the user prompt with all role assignments
+            user_prompt = "Generate Entra groups for the following role assignments:\n"
+            for group_name, role in groups:
+                user_prompt += f"- {group_name} ({role})\n"
+            
+            # Generate the Entra groups configuration using the LLM
+            try:
+                response = self.llm.invoke(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                )
+                
+                # The response should be the raw tfvars content without any markdown
+                tfvars = response.content.strip()
+                
+                # Validate that the response contains the expected format
+                if not tfvars.startswith("entra_groups"):
+                    # Attempt to extract just the content if it's wrapped in markdown
+                    match = re.search(r'```(?:hcl)?\s*(entra_groups.*?)\s*```', tfvars, re.DOTALL)
+                    if match:
+                        tfvars = match.group(1).strip()
+                    else:
+                        # Fall back to generating groups manually if the format is incorrect
+                        groups_content = []
+                        for group_name, role in groups:
+                            groups_content.append(f"""  {group_name} = {{
+    display_name = "{group_name}"
+    description  = "{role} role for {group_name.split('-')[0]} resource group"
+    owners       = ["00000000-0000-0000-0000-000000000000"]
+  }}""")
+                        
+                        tfvars = "entra_groups = {\n" + ",\n".join(groups_content) + "\n}"
+                
+                # For Entra groups, we only need the tfvars file
+                return {
+                    "main_config": "",  # No main.tf needed
+                    "tfvars": tfvars
+                }
+                
+            except Exception as e:
+                st.error(f"Error generating Entra groups with LLM: {str(e)}")
+                raise Exception(f"Failed to generate Entra groups configuration: {str(e)}")
+            
+        except Exception as e:
+            st.error(f"Error generating Entra groups configuration: {str(e)}")
+            raise Exception(f"Failed to generate Entra groups configuration: {str(e)}")
+
+    def _generate_resource_group_config(self, query: str) -> Dict[str, str]:
         """Generate Terraform configuration specifically for resource groups using a prompt file."""
         try:
             # Load the resource group prompt file
