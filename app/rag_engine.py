@@ -9,6 +9,7 @@ from langchain_openai import AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
+import re  # Move re import to the top of the file
 
 class TerraformRAGEngine:
     def __init__(self, template_dir: str):
@@ -207,6 +208,10 @@ class TerraformRAGEngine:
     def _generate_entra_groups_config(self, resource_group_tfvars: str) -> Dict[str, str]:
         """Generate Terraform configuration for Entra ID groups based on role assignments in resource groups."""
         try:
+            # Debug the input
+            st.write("Debug: Input to _generate_entra_groups_config:")
+            st.code(resource_group_tfvars, language='hcl')
+            
             # Load the Entra groups prompt file
             prompt_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates', 'entra_groups_prompt.txt')
             try:
@@ -217,13 +222,13 @@ class TerraformRAGEngine:
                 system_prompt = "Generate Terraform code for Azure Entra ID groups."
             
             # Extract role assignments from the resource group tfvars
-            import re
             groups = []
             
             # First, try to find the role_assignments block
             role_assignments_match = re.search(r'role_assignments\s*=\s*{([^}]*)}', resource_group_tfvars, re.DOTALL)
             if role_assignments_match:
                 role_assignments_content = role_assignments_match.group(1)
+                st.write(f"Found role assignments content: {role_assignments_content}")
                 
                 # Now find all group blocks within the role_assignments
                 group_pattern = r'(\w+)\s*=\s*{\s*resourcename\s*=\s*"([^"]+)"\s*role_definition_id_or_name\s*=\s*"([^"]+)"\s*principal_id\s*=\s*"([^"]+)"\s*}'
@@ -233,10 +238,12 @@ class TerraformRAGEngine:
                     group_key = match.group(1)  # The key in the role_assignments map
                     group_name = match.group(2)  # The resourcename
                     role = match.group(3)  # role_definition_id_or_name
+                    st.write(f"Found group: key={group_key}, name={group_name}, role={role}")
                     groups.append((group_key, group_name, role))
             
             if not groups:
                 # If no groups were found with the detailed pattern, try a simpler pattern
+                st.write("No groups found with detailed pattern, trying simpler pattern")
                 group_pattern = r'(\w+)\s*=\s*{([^}]*?role_definition_id_or_name\s*=\s*"([^"]+)"[^}]*)}'
                 group_matches = re.finditer(group_pattern, resource_group_tfvars, re.DOTALL)
                 
@@ -247,10 +254,12 @@ class TerraformRAGEngine:
                     # Try to extract the resourcename
                     name_match = re.search(r'resourcename\s*=\s*"([^"]+)"', group_content)
                     group_name = name_match.group(1) if name_match else group_key
+                    st.write(f"Found group with simpler pattern: key={group_key}, name={group_name}, role={role}")
                     groups.append((group_key, group_name, role))
             
             if not groups:
                 # If still no groups, try one more pattern
+                st.write("No groups found with simpler pattern, trying one more pattern")
                 group_pattern = r'(\w+)\s*=\s*{([^}]*)}'
                 group_matches = re.finditer(group_pattern, resource_group_tfvars, re.DOTALL)
                 
@@ -262,10 +271,11 @@ class TerraformRAGEngine:
                     if role_match and name_match:
                         role = role_match.group(1)
                         group_name = name_match.group(1)
+                        st.write(f"Found group with final pattern: key={group_key}, name={group_name}, role={role}")
                         groups.append((group_key, group_name, role))
             
             if not groups:
-                # If still no groups, return empty configuration
+                st.write("No groups found in any pattern, returning empty configuration")
                 return {"main_config": "", "tfvars": "", "tfvars_filename": "entra_groups.auto.tfvars"}
             
             # Create the user prompt with all role assignments
@@ -273,46 +283,32 @@ class TerraformRAGEngine:
             for group_key, group_name, role in groups:
                 user_prompt += f"- {group_name} ({role})\n"
             
-            # Generate the Entra groups configuration using the LLM
-            try:
-                response = self.llm.invoke(
-                    [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ]
-                )
-                
-                # The response should be the raw tfvars content without any markdown
-                tfvars = response.content.strip()
-                
-                # Validate that the response contains the expected format
-                if not tfvars.startswith("entra_groups"):
-                    # Attempt to extract just the content if it's wrapped in markdown
-                    match = re.search(r'```(?:hcl)?\s*(entra_groups.*?)\s*```', tfvars, re.DOTALL)
-                    if match:
-                        tfvars = match.group(1).strip()
-                    else:
-                        # Fall back to generating groups manually if the format is incorrect
-                        groups_content = []
-                        for group_key, group_name, role in groups:
-                            groups_content.append(f"""  {group_key} = {{
+            st.write(f"Generated user prompt: {user_prompt}")
+            
+            # Skip LLM call and manually generate groups for consistency and reliability
+            st.write("Generating Entra groups manually for guaranteed format")
+            groups_content = []
+            for group_key, group_name, role in groups:
+                groups_content.append(f"""  {group_name} = {{
     display_name = "{group_name}"
     description  = "{role} role for {group_name}"
     owners       = ["00000000-0000-0000-0000-000000000000"]
   }}""")
-                        
-                        tfvars = "entra_groups = {\n" + ",\n".join(groups_content) + "\n}"
                 
-                # For Entra groups, we only need the tfvars file
-                return {
-                    "main_config": "",  # No main.tf needed
-                    "tfvars": tfvars,
-                    "tfvars_filename": "entra_groups.auto.tfvars"
-                }
+            tfvars = "entra_groups = {\n" + ",\n".join(groups_content) + "\n}"
+            st.write(f"Manually generated tfvars: {tfvars}")
+            
+            # Debug the output
+            result = {
+                "main_config": "",  # No main.tf needed
+                "tfvars": tfvars,
+                "tfvars_filename": "entra_groups.auto.tfvars"
+            }
+            st.write("Debug: Returning from _generate_entra_groups_config:")
+            st.json(result)
                 
-            except Exception as e:
-                st.error(f"Error generating Entra groups with LLM: {str(e)}")
-                raise Exception(f"Failed to generate Entra groups configuration: {str(e)}")
+            # For Entra groups, we only need the tfvars file
+            return result
             
         except Exception as e:
             st.error(f"Error generating Entra groups configuration: {str(e)}")
@@ -348,7 +344,6 @@ class TerraformRAGEngine:
                 # Validate that the response contains the expected format
                 if not tfvars.startswith("resource_groups"):
                     # Attempt to extract just the content if it's wrapped in markdown
-                    import re
                     match = re.search(r'```(?:hcl)?\s*(resource_groups.*?)\s*```', tfvars, re.DOTALL)
                     if match:
                         tfvars = match.group(1).strip()
@@ -382,7 +377,8 @@ class TerraformRAGEngine:
                 # For resource groups, we only need the tfvars file
                 return {
                     "main_config": "",  # No main.tf needed
-                    "tfvars": tfvars
+                    "tfvars": tfvars,
+                    "tfvars_filename": "resource_groups.auto.tfvars"
                 }
                 
             except Exception as e:
@@ -393,7 +389,7 @@ class TerraformRAGEngine:
             st.error(f"Error generating resource group configuration: {str(e)}")
             raise Exception(f"Failed to generate resource group configuration: {str(e)}")
 
-    def _generate_storage_account_config(self, query: str) -> str:
+    def _generate_storage_account_config(self, query: str) -> Dict[str, str]:
         """Generate Terraform configuration specifically for storage accounts using a prompt file."""
         try:
             # Load the storage account prompt file
@@ -423,41 +419,76 @@ class TerraformRAGEngine:
                 # Validate that the response contains the expected format
                 if not tfvars.startswith("storage_accounts"):
                     # Attempt to extract just the content if it's wrapped in markdown
-                    import re
                     match = re.search(r'```(?:hcl)?\s*(storage_accounts.*?)\s*```', tfvars, re.DOTALL)
                     if match:
                         tfvars = match.group(1).strip()
                     else:
                         # Fall back to a template if the format is incorrect
-                        tfvars = """storage_accounts = {
-  st01 = {
-    name                      = "st01"
-    resource_group_key        = "rg01"
+                        # Try to extract name and resource group from the query
+                        extracted_name = "st01"
+                        extracted_rg = "rg01"
+                        
+                        if "called" in query.lower() and "'" in query:
+                            parts = query.split("'")
+                            if len(parts) >= 3:
+                                extracted_name = parts[1]
+                        
+                        if "in" in query.lower() and "resource group" in query.lower():
+                            rg_parts = query.lower().split("resource group")
+                            if len(rg_parts) >= 2:
+                                rg_candidate = rg_parts[1].strip().split()[0]
+                                if rg_candidate:
+                                    extracted_rg = rg_candidate
+                        
+                        tfvars = f"""storage_accounts = {{
+  st01 = {{
+    name                      = "{extracted_name}"
+    resource_group_key        = "{extracted_rg}"
+    access_tier               = "Hot"
+    account_kind              = "StorageV2"
+    account_replication_type  = "ZRS"
+    account_tier              = "Standard"
 
-    private_endpoints = {
-      blob = {
+    private_endpoints = {{
+      blob = {{
         subresource_name = "blob"
-      },
-      queue = {
+      }},
+      queue = {{
         subresource_name = "queue"
-      },
-      table = {
+      }},
+      table = {{
         subresource_name = "table"
-      },
-      file = {
+      }},
+      file = {{
         subresource_name = "file"
-      }
-    }
-    container = {}
+      }}
+    }}
+    container = {{}}
 
-    role_assignments = {}
-  }
-}"""
+    role_assignments = {{}}
+  }}
+}}"""
                 
-                # For storage accounts, we only need the tfvars file
+                # Check if role assignments are present in the tfvars
+                role_assignments_match = re.search(r'role_assignments\s*=\s*{([^}]*)}', tfvars, re.DOTALL)
+                if role_assignments_match and role_assignments_match.group(1).strip():
+                    # If role assignments are present, generate Entra groups configuration
+                    entra_configs = self._generate_entra_groups_config(tfvars)
+                    st.write("Generated Entra groups configuration:")
+                    st.write(entra_configs["tfvars"])
+                    return {
+                        "main_config": "",  # No main.tf needed
+                        "tfvars": tfvars,
+                        "tfvars_filename": "storage_accounts.auto.tfvars",
+                        "entra_configs": entra_configs
+                    }
+                
+                # For storage accounts without role assignments, we only need the tfvars file
                 return {
                     "main_config": "",  # No main.tf needed
-                    "tfvars": tfvars
+                    "tfvars": tfvars,
+                    "tfvars_filename": "storage_accounts.auto.tfvars",
+                    "entra_configs": {"main_config": "", "tfvars": "", "tfvars_filename": "entra_groups.auto.tfvars"}
                 }
                 
             except Exception as e:
@@ -498,7 +529,6 @@ class TerraformRAGEngine:
                 # Validate that the response contains the expected format
                 if not tfvars.startswith("key_vault"):
                     # Attempt to extract just the content if it's wrapped in markdown
-                    import re
                     match = re.search(r'```(?:hcl)?\s*(key_vault.*?)\s*```', tfvars, re.DOTALL)
                     if match:
                         tfvars = match.group(1).strip()
@@ -524,7 +554,8 @@ class TerraformRAGEngine:
                 # For Key Vaults, we only need the tfvars file
                 return {
                     "main_config": "",  # No main.tf needed
-                    "tfvars": tfvars
+                    "tfvars": tfvars,
+                    "tfvars_filename": "key_vault.auto.tfvars"
                 }
                 
             except Exception as e:
@@ -535,7 +566,7 @@ class TerraformRAGEngine:
             st.error(f"Error generating Key Vault configuration: {str(e)}")
             raise Exception(f"Failed to generate Key Vault configuration: {str(e)}")
 
-    def generate_terraform(self, query: str) -> str:
+    def generate_terraform(self, query: str) -> Dict[str, str]:
         """Generate Terraform configuration using RAG."""
         try:
             # First, validate the query
@@ -552,26 +583,80 @@ class TerraformRAGEngine:
             # Check if this is a Key Vault request
             is_key_vault_request = "key vault" in query.lower() or "keyvault" in query.lower()
             
+            # Updated to return a dictionary with all configurations
+            result = {
+                "main_config": "",
+                "configs": []
+            }
+            
             # Handling resource group requests directly with the prompt-based approach
             if is_resource_group_request:
-                # For resource groups, we only need the tfvars file
+                # For resource groups, we need both the resource group and Entra groups configs
                 configs = self._generate_resource_group_config(query)
-                # Return the tfvars content only
-                return configs['tfvars']
+                result["configs"].append({
+                    "type": "resource_group",
+                    "content": configs["tfvars"],
+                    "filename": configs["tfvars_filename"]
+                })
+                
+                # Check if role assignments are present and generate Entra groups
+                role_assignments_match = re.search(r'role_assignments\s*=\s*{([^}]*)}', configs['tfvars'], re.DOTALL)
+                if role_assignments_match and role_assignments_match.group(1).strip():
+                    entra_configs = self._generate_entra_groups_config(configs['tfvars'])
+                    result["configs"].append({
+                        "type": "entra_groups",
+                        "content": entra_configs["tfvars"],
+                        "filename": entra_configs["tfvars_filename"]
+                    })
+                
+                # For backwards compatibility, return the combined config as a string
+                combined = ""
+                for config in result["configs"]:
+                    combined += f"# {config['type'].replace('_', ' ').title()} Configuration\n{config['content']}\n\n"
+                return combined.strip()
             
             # Handling storage account requests with the prompt-based approach
             elif is_storage_account_request:
-                # For storage accounts, we only need the tfvars file
+                # For storage accounts, we need both the storage account and Entra groups configs
                 configs = self._generate_storage_account_config(query)
-                # Return the tfvars content only
-                return configs['tfvars']
+                result["configs"].append({
+                    "type": "storage_account",
+                    "content": configs["tfvars"],
+                    "filename": configs["tfvars_filename"]
+                })
+                
+                # Check if role assignments are present and generate Entra groups
+                role_assignments_match = re.search(r'role_assignments\s*=\s*{([^}]*)}', configs['tfvars'], re.DOTALL)
+                if role_assignments_match and role_assignments_match.group(1).strip():
+                    st.write("Found role assignments in storage account, generating Entra groups")
+                    entra_configs = self._generate_entra_groups_config(configs['tfvars'])
+                    result["configs"].append({
+                        "type": "entra_groups",
+                        "content": entra_configs["tfvars"],
+                        "filename": entra_configs["tfvars_filename"]
+                    })
+                
+                # For backwards compatibility, return the combined config as a string
+                combined = ""
+                for config in result["configs"]:
+                    combined += f"# {config['type'].replace('_', ' ').title()} Configuration\n{config['content']}\n\n"
+                return combined.strip()
                 
             # Handling Key Vault requests with the prompt-based approach
             elif is_key_vault_request:
                 # For Key Vaults, we only need the tfvars file
                 configs = self._generate_key_vault_config(query)
-                # Return the tfvars content only
-                return configs['tfvars']
+                result["configs"].append({
+                    "type": "key_vault",
+                    "content": configs["tfvars"],
+                    "filename": configs["tfvars_filename"]
+                })
+                
+                # For backwards compatibility, return the combined config as a string
+                combined = ""
+                for config in result["configs"]:
+                    combined += f"# {config['type'].replace('_', ' ').title()} Configuration\n{config['content']}\n\n"
+                return combined.strip()
                 
             # For other resources, get relevant template types
             relevant_types = self._get_relevant_templates(query)

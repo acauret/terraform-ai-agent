@@ -102,6 +102,8 @@ class AzureTerraformAgent:
         """Generate Terraform configuration using RAG approach.
         Returns a tuple of (terraform_code, tfvars_content, tfvars_filename)
         """
+        st.write("Debug: Starting generate_terraform with input:", user_input)
+        
         # Check for specific resource types
         is_resource_group_request = "resource group" in user_input.lower()
         is_storage_account_request = "storage account" in user_input.lower() or "storage accounts" in user_input.lower()
@@ -124,8 +126,10 @@ class AzureTerraformAgent:
             
             # Check if we need to generate Entra groups
             if "role_assignments" in configs['tfvars'] and "{}" not in configs['tfvars']:
+                st.write("Debug: Resource group has role assignments, generating Entra groups")
                 # Generate Entra groups configuration
                 entra_configs = self.rag_engine._generate_entra_groups_config(configs['tfvars'])
+                st.write("Debug: Entra groups generation complete, returning data")
                 return "", configs['tfvars'], tfvars_filename, entra_configs['tfvars']
             
             return "", configs['tfvars'], tfvars_filename, ""
@@ -133,6 +137,35 @@ class AzureTerraformAgent:
         elif is_storage_account_request:
             # For storage accounts, get both the main config and tfvars
             configs = self.rag_engine._generate_storage_account_config(user_input)
+            st.write("Debug: Storage account configuration generated")
+            st.json(configs)
+            
+            # Check if we need to generate Entra groups - direct check for entra_configs
+            if 'entra_configs' in configs and configs['entra_configs']['tfvars']:
+                st.write("Debug: Using pre-generated Entra groups configuration")
+                return "", configs['tfvars'], tfvars_filename, configs['entra_configs']['tfvars']
+            
+            # Fallback to checking role assignments in the tfvars content
+            role_assignments_check = "role_assignments" in configs['tfvars'] and "resourcename" in configs['tfvars']
+            st.write(f"Debug: Storage account role assignments check: {role_assignments_check}")
+            
+            if role_assignments_check:
+                st.write("Debug: Storage account has role assignments, generating Entra groups")
+                # Generate Entra groups configuration
+                entra_configs = self.rag_engine._generate_entra_groups_config(configs['tfvars'])
+                st.write("Debug: Entra groups generation complete, returning data")
+                st.json(entra_configs)
+                
+                # Show the values being returned
+                result = ("", configs['tfvars'], tfvars_filename, entra_configs['tfvars'])
+                st.write("Debug: Returning from storage account with Entra groups:")
+                st.write(f"- Terraform code length: {len(result[0])}")
+                st.write(f"- tfvars content length: {len(result[1])}")
+                st.write(f"- tfvars filename: {result[2]}")
+                st.write(f"- Entra configs length: {len(result[3])}")
+                
+                return result
+                
             return "", configs['tfvars'], tfvars_filename, ""
             
         elif is_key_vault_request:
@@ -363,6 +396,13 @@ def azure_terraform_chat():
                 # Generate Terraform code
                 terraform_code, tfvars_content, tfvars_filename, entra_configs = agent.generate_terraform(prompt)
                 
+                # Debug what's coming back from generate_terraform
+                st.write("Debug: Results from generate_terraform:")
+                st.write(f"- Terraform code length: {len(terraform_code)}")
+                st.write(f"- tfvars content length: {len(tfvars_content)}")
+                st.write(f"- tfvars filename: {tfvars_filename}")
+                st.write(f"- Entra configs length: {len(entra_configs)}")
+                
                 # Store the generated configurations
                 st.session_state.current_terraform_code = terraform_code
                 st.session_state.current_tfvars_content = tfvars_content
@@ -380,8 +420,15 @@ def azure_terraform_chat():
                     st.markdown(f"### Variable Values ({tfvars_filename})")
                     st.code(tfvars_content, language='hcl')
                     
-                    # Display Entra groups content if available
+                    # Debug the Entra groups configuration
                     if entra_configs:
+                        st.write(f"Debug: Entra groups configuration is present with length: {len(entra_configs)}")
+                        st.write(f"Debug: First 100 characters: {entra_configs[:100]}...")
+                    else:
+                        st.write("Debug: No Entra groups configuration returned")
+                        
+                    # Display Entra groups content if available
+                    if entra_configs and len(entra_configs.strip()) > 0:
                         st.markdown("### Entra Groups Configuration")
                         st.code(entra_configs, language='hcl')
                     
@@ -390,7 +437,7 @@ def azure_terraform_chat():
                     if terraform_code:
                         content += f"Generated Terraform Configuration:\n```hcl\n{terraform_code}\n```\n\n"
                     content += f"Variable Values ({tfvars_filename}):\n```hcl\n{tfvars_content}\n```"
-                    if entra_configs:
+                    if entra_configs and len(entra_configs.strip()) > 0:
                         content += f"\n\nEntra Groups Configuration:\n```hcl\n{entra_configs}\n```"
                     
                     st.session_state.messages.append({
