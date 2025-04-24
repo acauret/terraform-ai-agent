@@ -160,4 +160,117 @@ key_vault = {
 
     role_assignments = {}
   }
-} 
+}
+
+Generate a key_vault.auto.tfvars file for Azure Key Vaults. The file should contain a key_vault block with the following structure:
+
+key_vault = {
+  <key_vault_name> = {
+    name               = "<key_vault_name>"
+    resource_group_key = "rg01"
+
+    private_endpoints = {
+      vault = {
+        subresource_name = "vault"
+      }
+    }
+    network_acls        = {}
+    diagnostic_settings = {}
+
+    role_assignments = {
+      <role_name> = {
+        resourcename               = "<key_vault_name>"
+        role_definition_id_or_name = "<role_type>"
+        principal_id               = "<principal_id>"
+      }
+    }
+  }
+}
+
+IMPORTANT RULES:
+1. The key_vault_name should be prefixed with "kv-" if not already present
+2. The role_name should be based on the role type, converted to lowercase with hyphens (e.g., "Key Vault Administrator" becomes "key-vault-administrator")
+3. The principal_id should be exactly as specified in the query
+4. The resourcename should always be the key vault name
+5. The role_definition_id_or_name should be the full role name (e.g., "Key Vault Administrator", "Key Vault Secrets User")
+
+EXAMPLES:
+
+1. For a query like "key vault named yesta role assignments kvadmin Key Vault Administrator":
+key_vault = {
+  kv-yesta = {
+    name               = "kv-yesta"
+    resource_group_key = "rg01"
+
+    private_endpoints = {
+      vault = {
+        subresource_name = "vault"
+      }
+    }
+    network_acls        = {}
+    diagnostic_settings = {}
+
+    role_assignments = {
+      key-vault-administrator = {
+        resourcename               = "kv-yesta"
+        role_definition_id_or_name = "Key Vault Administrator"
+        principal_id               = "kvadmin"
+      }
+    }
+  }
+}
+
+2. For a query like "key vault named secrets with roles tester (Key Vault Secrets User) and admin (Key Vault Administrator)":
+key_vault = {
+  kv-secrets = {
+    name               = "kv-secrets"
+    resource_group_key = "rg01"
+
+    private_endpoints = {
+      vault = {
+        subresource_name = "vault"
+      }
+    }
+    network_acls        = {}
+    diagnostic_settings = {}
+
+    role_assignments = {
+      key-vault-secrets-user = {
+        resourcename               = "kv-secrets"
+        role_definition_id_or_name = "Key Vault Secrets User"
+        principal_id               = "tester"
+      },
+      key-vault-administrator = {
+        resourcename               = "kv-secrets"
+        role_definition_id_or_name = "Key Vault Administrator"
+        principal_id               = "admin"
+      }
+    }
+  }
+}
+
+3. For a query like "key vault named test with role assignments reader (Key Vault Secrets User) as reader1":
+key_vault = {
+  kv-test = {
+    name               = "kv-test"
+    resource_group_key = "rg01"
+
+    private_endpoints = {
+      vault = {
+        subresource_name = "vault"
+      }
+    }
+    network_acls        = {}
+    diagnostic_settings = {}
+
+    role_assignments = {
+      key-vault-secrets-user = {
+        resourcename               = "kv-test"
+        role_definition_id_or_name = "Key Vault Secrets User"
+        principal_id               = "reader1"
+      }
+    }
+  }
+}
+
+The response should ONLY contain the raw content of the key_vault.auto.tfvars file, without any additional explanations or formatting. 

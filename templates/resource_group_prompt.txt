@@ -6,39 +6,46 @@ INSTRUCTIONS:
 2. Use EXACTLY the following structure with resource_groups as a map object.
 3. Create resource group entries for EACH resource group mentioned in the user request.
 4. Use "rg01", "rg02", etc. as the keys for each resource group.
-5. Include an empty role_assignments map for each resource group, as default.
-6. If role assignments are needed, include them in the role_assignments map following this format:
+5. ALWAYS include a role_assignments map for each resource group, even if empty.
+6. ALWAYS include a tags map for each resource group, even if empty.
+7. If role assignments are mentioned in the request (like "tester", "operator", etc.), you MUST include them in the role_assignments map.
+8. If tags are mentioned in the request (like "environment", "project", etc.), you MUST include them in the tags map.
+9. For each role assignment, use this EXACT format:
    role_assignments = {
-     group-name = {
+     group-key = {
        resourcename               = "group-name"
-       role_definition_id_or_name = "Reader"
+       role_definition_id_or_name = "Reader"  # Use "Reader" for basic access, "Contributor" for full access
        principal_id               = "group-name"
      }
    }
-7. IMPORTANT: When multiple role assignments are specified (comma-separated), create an entry for EACH role assignment.
-8. IMPORTANT: When role assignments are specified, you MUST trigger the Entra groups prompt (templates/entra_groups_prompt.txt) to generate the corresponding Entra ID groups.
-   The group names in the role_assignments block MUST match the group names in the Entra groups file.
-9. Follow the EXACT formatting, spacing and structure shown in the examples.
-10. DO NOT add additional variables or fields.
-11. DO NOT omit any fields shown in the examples.
-12. DO NOT add any markdown code formatting - ONLY output the raw tfvars content.
-13. If the user mentions multiple resource groups, create an entry for each one.
+10. For tags, use this EXACT format:
+    tags = {
+      environment = "dev"  # Use "dev", "test", "qa", "prod" based on the resource group name
+      project     = "project-name"  # Extract from resource group name or use "default" if not specified
+      managed_by  = "terraform"
+    }
+11. IMPORTANT: When multiple roles are mentioned (like "tester and operator"), create an entry for EACH role.
+12. IMPORTANT: The role_assignments block MUST be included in the output, even if empty.
+13. IMPORTANT: The tags block MUST be included in the output, even if empty.
+14. Follow the EXACT formatting, spacing and structure shown in the examples.
+15. DO NOT add additional variables or fields.
+16. DO NOT omit any fields shown in the examples.
+17. DO NOT add any markdown code formatting - ONLY output the raw tfvars content.
 
 EXAMPLE FORMAT (follow this EXACTLY):
 
 resource_groups = {
-  # First resource group details
   rg01 = {
-    name     = "REPLACE_WITH_FIRST_NAME"
-    location = "REPLACE_WITH_FIRST_LOCATION"
-    role_assignments = {}
-  },
-
-  # Second resource group details
-  rg02 = {
-    name     = "REPLACE_WITH_SECOND_NAME"
-    location = "REPLACE_WITH_SECOND_LOCATION"
-    role_assignments = {}
+    name     = "REPLACE_WITH_NAME"
+    location = "REPLACE_WITH_LOCATION"
+    role_assignments = {
+      # Add role assignments here if mentioned in the request
+    }
+    tags = {
+      environment = "dev"  # Will be set based on resource group name
+      project     = "default"
+      managed_by  = "terraform"
+    }
   }
 }
 
@@ -49,46 +56,110 @@ Just output the raw content directly.
 
 EXAMPLES:
 
-Example 1: If the user asks for "Resource group rg-uks-acaa-platform-dev-01 uk south role assignment rg-uks-acaa-platform-dev-01-reader, rg-uks-acaa-platform-dev-01-contributor", your response should be:
+Example 1: If the user asks for "Create a resource group rg-test with role assignments for tester and operator", your response should be:
 
 resource_groups = {
-  # Resource group details
   rg01 = {
-    name     = "rg-uks-acaa-platform-dev-01"
-    location = "uksouth"
+    name     = "rg-test"
+    location = "westeurope"
     role_assignments = {
-      rg-uks-acaa-platform-dev-01-reader = {
-        resourcename               = "rg-uks-acaa-platform-dev-01-reader"
+      tester = {
+        resourcename               = "tester"
         role_definition_id_or_name = "Reader"
-        principal_id               = "rg-uks-acaa-platform-dev-01-reader"
+        principal_id               = "tester"
       },
-      rg-uks-acaa-platform-dev-01-contributor = {
-        resourcename               = "rg-uks-acaa-platform-dev-01-contributor"
+      operator = {
+        resourcename               = "operator"
         role_definition_id_or_name = "Contributor"
-        principal_id               = "rg-uks-acaa-platform-dev-01-contributor"
+        principal_id               = "operator"
       }
+    }
+    tags = {
+      environment = "test"
+      project     = "default"
+      managed_by  = "terraform"
     }
   }
 }
 
-Example 2: If the user asks for "Resource group rg-uks-acaa-platform-dev-02 uk south role assignment rg-uks-acaa-platform-dev-02-contributor, rg-uks-acaa-platform-dev-02-owner", your response should be:
+Example 2: If the user asks for "Create a resource group rg-prod in eastus", your response should be:
 
 resource_groups = {
-  # Resource group details
   rg01 = {
-    name     = "rg-uks-acaa-platform-dev-02"
-    location = "uksouth"
+    name     = "rg-prod"
+    location = "eastus"
+    role_assignments = {}
+    tags = {
+      environment = "prod"
+      project     = "default"
+      managed_by  = "terraform"
+    }
+  }
+}
+
+Example 3: If the user asks for "Create a resource group rg-dev with role assignments for admin (Contributor) and reader (Reader)", your response should be:
+
+resource_groups = {
+  rg01 = {
+    name     = "rg-dev"
+    location = "westeurope"
     role_assignments = {
-      rg-uks-acaa-platform-dev-02-contributor = {
-        resourcename               = "rg-uks-acaa-platform-dev-02-contributor"
+      admin = {
+        resourcename               = "admin"
         role_definition_id_or_name = "Contributor"
-        principal_id               = "rg-uks-acaa-platform-dev-02-contributor"
+        principal_id               = "admin"
       },
-      rg-uks-acaa-platform-dev-02-owner = {
-        resourcename               = "rg-uks-acaa-platform-dev-02-owner"
-        role_definition_id_or_name = "Owner"
-        principal_id               = "rg-uks-acaa-platform-dev-02-owner"
+      reader = {
+        resourcename               = "reader"
+        role_definition_id_or_name = "Reader"
+        principal_id               = "reader"
       }
+    }
+    tags = {
+      environment = "dev"
+      project     = "default"
+      managed_by  = "terraform"
+    }
+  }
+}
+
+Example 4: If the user asks for "Create a resource group rg-qa with role assignments for qa-tester (Reader) and qa-admin (Contributor)", your response should be:
+
+resource_groups = {
+  rg01 = {
+    name     = "rg-qa"
+    location = "westeurope"
+    role_assignments = {
+      qa-tester = {
+        resourcename               = "qa-tester"
+        role_definition_id_or_name = "Reader"
+        principal_id               = "qa-tester"
+      },
+      qa-admin = {
+        resourcename               = "qa-admin"
+        role_definition_id_or_name = "Contributor"
+        principal_id               = "qa-admin"
+      }
+    }
+    tags = {
+      environment = "qa"
+      project     = "default"
+      managed_by  = "terraform"
+    }
+  }
+}
+
+Example 5: If the user asks for "Create a resource group rg-project1-dev with tags environment=dev project=project1", your response should be:
+
+resource_groups = {
+  rg01 = {
+    name     = "rg-project1-dev"
+    location = "westeurope"
+    role_assignments = {}
+    tags = {
+      environment = "dev"
+      project     = "project1"
+      managed_by  = "terraform"
     }
   }
 }
