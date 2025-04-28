@@ -7,9 +7,9 @@ from .base_agent import BaseAgent
 class ResourceGroupAgent(BaseAgent):
     """Agent specialized in generating Terraform configurations for Azure Resource Groups."""
     
-    def __init__(self, templates_dir: str):
+    def __init__(self, templates_dir: str, debug_mode: bool = False):
         """Initialize the resource group agent."""
-        super().__init__(templates_dir)
+        super().__init__(templates_dir, debug_mode)
         self.prompt_file = "resource_group_prompt.txt"
     
     def generate_config(self, query: str) -> Dict[str, Any]:

@@ -10,14 +10,15 @@ from .entra_groups_agent import EntraGroupsAgent
 class AgentFactory:
     """Factory class for creating and managing specialized agents."""
     
-    def __init__(self, template_dir: str):
-        """Initialize the agent factory with a template directory."""
+    def __init__(self, template_dir: str, debug_mode: bool = False):
+        """Initialize the agent factory with a template directory and debug mode."""
         self.template_dir = template_dir
+        self.debug_mode = debug_mode
         self.agents = {
-            "resource_group": ResourceGroupAgent(template_dir),
-            "storage_account": StorageAccountAgent(template_dir),
-            "key_vault": KeyVaultAgent(template_dir),
-            "entra_groups": EntraGroupsAgent(template_dir)
+            "resource_group": ResourceGroupAgent(template_dir, debug_mode),
+            "storage_account": StorageAccountAgent(template_dir, debug_mode),
+            "key_vault": KeyVaultAgent(template_dir, debug_mode),
+            "entra_groups": EntraGroupsAgent(template_dir, debug_mode)
         }
     
     def get_agent(self, agent_type: str) -> BaseAgent:
@@ -130,25 +131,16 @@ class AgentFactory:
         return combined.strip()
 
     @staticmethod
-    def create_agent(agent_type: str, templates_dir: str) -> BaseAgent:
-        """
-        Create a specialized agent based on the agent type.
+    def create_agent(resource_type: str, template_dir: str, debug_mode: bool = False) -> BaseAgent:
+        """Create a new agent instance for the specified resource type."""
+        agent_class = {
+            "resource_group": ResourceGroupAgent,
+            "storage_account": StorageAccountAgent,
+            "key_vault": KeyVaultAgent,
+            "entra_groups": EntraGroupsAgent
+        }.get(resource_type.lower())
         
-        Args:
-            agent_type (str): Type of agent to create
-            templates_dir (str): Directory containing prompt templates
+        if not agent_class:
+            raise ValueError(f"Unsupported resource type: {resource_type}")
             
-        Returns:
-            BaseAgent: Specialized agent instance
-            
-        Raises:
-            ValueError: If agent_type is not supported
-        """
-        if agent_type == "resource_group":
-            return ResourceGroupAgent(templates_dir)
-        elif agent_type == "storage_account":
-            return StorageAccountAgent(templates_dir)
-        elif agent_type == "key_vault":
-            return KeyVaultAgent(templates_dir)
-        else:
-            raise ValueError(f"Unsupported agent type: {agent_type}") 
+        return agent_class(template_dir, debug_mode) 

@@ -7,9 +7,9 @@ from .base_agent import BaseAgent
 class StorageAccountAgent(BaseAgent):
     """Agent specialized in generating Terraform configurations for Azure Storage Accounts."""
     
-    def __init__(self, templates_dir: str):
+    def __init__(self, templates_dir: str, debug_mode: bool = False):
         """Initialize the storage account agent."""
-        super().__init__(templates_dir)
+        super().__init__(templates_dir, debug_mode)
         self.prompt_file = "storage_account_prompt.txt"
     
     def _ensure_st_prefix(self, name: str) -> str:

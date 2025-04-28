@@ -6,9 +6,10 @@ from langchain_openai import AzureChatOpenAI
 class BaseAgent:
     """Base class for all resource-specific agents."""
     
-    def __init__(self, template_dir: str):
-        """Initialize the base agent with a template directory."""
+    def __init__(self, template_dir: str, debug_mode: bool = False):
+        """Initialize the base agent with a template directory and debug mode."""
         self.template_dir = template_dir
+        self.debug_mode = debug_mode
         
         # Store environment variables but don't print them yet
         self.azure_api_key = os.getenv('AZURE_OPENAI_API_KEY')

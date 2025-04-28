@@ -16,11 +16,17 @@ import re  # Move re import to the top of the file
 dotenv.load_dotenv()
 
 class TerraformRAGEngine:
-    def __init__(self, template_dir: str):
+    def __init__(self, template_dir: str, debug_mode: bool = False):
         """Initialize the RAG engine with template directory."""
+        self.debug_mode = debug_mode
+        if self.debug_mode:
+            st.write("🔍 Initializing TerraformRAGEngine...")
+            st.write(f"📁 Template directory: {template_dir}")
         self.template_dir = template_dir
         
         # Verify Azure OpenAI configuration
+        if self.debug_mode:
+            st.write("🔐 Verifying Azure OpenAI configuration...")
         required_vars = [
             'AZURE_OPENAI_API_KEY',
             'AZURE_OPENAI_ENDPOINT',
@@ -30,9 +36,16 @@ class TerraformRAGEngine:
         
         missing_vars = [var for var in required_vars if not os.getenv(var)]
         if missing_vars:
+            if self.debug_mode:
+                st.error(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+        else:
+            if self.debug_mode:
+                st.success("✅ All required environment variables are present")
         
         try:
+            if self.debug_mode:
+                st.write("🤖 Initializing Azure OpenAI embeddings...")
             self.embeddings = AzureOpenAIEmbeddings(
                 azure_deployment=os.getenv('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME'),
                 openai_api_version=os.getenv('AZURE_OPENAI_API_VERSION', '2023-05-15'),
@@ -40,19 +53,33 @@ class TerraformRAGEngine:
                 api_key=os.getenv('AZURE_OPENAI_API_KEY')
             )
             # Test the embeddings
+            if self.debug_mode:
+                st.write("🧪 Testing embeddings...")
             test_result = self.embeddings.embed_query("test")
             if not test_result:
+                if self.debug_mode:
+                    st.error("❌ Failed to generate embeddings")
                 raise ValueError("Failed to generate embeddings")
+            if self.debug_mode:
+                st.success(f"✅ Embeddings test successful (vector length: {len(test_result)})")
         except Exception as e:
+            if self.debug_mode:
+                st.error(f"❌ Failed to initialize Azure OpenAI embeddings: {str(e)}")
             raise ValueError(f"Failed to initialize Azure OpenAI embeddings: {str(e)}")
             
+        if self.debug_mode:
+            st.write("📝 Initializing text splitter...")
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             separators=["\n\n", "\n", " ", ""]
         )
+        if self.debug_mode:
+            st.write(f"✅ Text splitter configured with chunk_size=1000, chunk_overlap=200")
         
         try:
+            if self.debug_mode:
+                st.write("🤖 Initializing AzureChatOpenAI...")
             self.llm = AzureChatOpenAI(
                 deployment_name=os.getenv('AZURE_OPENAI_CHAT_DEPLOYMENT_NAME'),
                 openai_api_version=os.getenv('AZURE_OPENAI_API_VERSION', '2023-05-15'),
@@ -60,11 +87,19 @@ class TerraformRAGEngine:
                 api_key=os.getenv('AZURE_OPENAI_API_KEY'),
                 temperature=0
             )
+            if self.debug_mode:
+                st.success("✅ AzureChatOpenAI initialized successfully")
         except Exception as e:
+            if self.debug_mode:
+                st.error(f"❌ Failed to initialize AzureChatOpenAI: {str(e)}")
             raise ValueError(f"Failed to initialize AzureChatOpenAI: {str(e)}")
             
         self.vector_store = None
+        if self.debug_mode:
+            st.write("🔄 Initializing vector store...")
         self._initialize_vector_store()
+        if self.debug_mode:
+            st.success("✅ TerraformRAGEngine initialization complete")
 
     def _validate_query(self, query: str) -> Tuple[bool, str]:
         """
@@ -116,117 +151,138 @@ class TerraformRAGEngine:
         except Exception as e:
             return False, f"Error validating query: {str(e)}"
 
-    def _load_templates(self) -> List[Document]:
-        """Load all Terraform templates as documents."""
-        documents = []
-        tfvars_files = {}
-        
-        # Define a local debug function
-        def debug_print(*args, **kwargs):
-            if hasattr(st.session_state, 'debug_mode') and st.session_state.debug_mode:
-                st.write(*args, **kwargs)
-        
-        # Debug information about the template directory
-        debug_print(f"Loading templates from directory: {self.template_dir}")
-        if not os.path.exists(self.template_dir):
-            st.error(f"Templates directory does not exist: {self.template_dir}")
-            return documents
-            
-        # List the contents of the directory to help debug
-        try:
-            files_in_dir = os.listdir(self.template_dir)
-            debug_print(f"Files found in templates directory: {files_in_dir}")
-            if not files_in_dir:
-                st.error(f"Templates directory is empty: {self.template_dir}")
-                return documents
-        except Exception as e:
-            st.error(f"Error listing files in templates directory: {str(e)}")
-            return documents
-        
-        # First, load all .tfvars files and associate them with their template types
-        for filename in files_in_dir:
-            if filename.endswith('.tfvars'):
-                template_type = filename.replace('.tfvars', '')
-                file_path = os.path.join(self.template_dir, filename)
-                try:
-                    with open(file_path, 'r') as f:
-                        tfvars_files[template_type] = f.read()
-                    debug_print(f"Loaded .tfvars file: {filename}")
-                except Exception as e:
-                    st.error(f"Error reading .tfvars file {filename}: {str(e)}")
-        
-        # Then load all .tf files, attaching associated .tfvars content if available
-        for filename in files_in_dir:
-            if filename.endswith('.tf'):
-                file_path = os.path.join(self.template_dir, filename)
-                try:
-                    with open(file_path, 'r') as f:
-                        content = f.read()
-                    
-                    # Store the template type in metadata
-                    template_type = filename.replace('.tf', '')
-                    
-                    # Attach .tfvars content if available
-                    metadata = {
-                        "source": filename, 
-                        "type": template_type
-                    }
-                    
-                    # If we have an associated .tfvars file, include it in the metadata
-                    if template_type in tfvars_files:
-                        metadata["tfvars"] = tfvars_files[template_type]
-                    
-                    doc = Document(
-                        page_content=content,
-                        metadata=metadata
-                    )
-                    documents.append(doc)
-                    debug_print(f"Loaded .tf file: {filename}")
-                except Exception as e:
-                    st.error(f"Error reading .tf file {filename}: {str(e)}")
-        
-        debug_print(f"Total documents loaded: {len(documents)}")
-        return documents
-
     def _initialize_vector_store(self):
-        """Initialize the vector store with chunked documents."""
+        """Initialize the vector store with prompt files."""
         try:
             # Create a persistent directory for the database
             db_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
-            os.makedirs(db_dir, exist_ok=True)
+            if self.debug_mode:
+                st.write(f"📁 Creating database directory: {db_dir}")
             
-            documents = self._load_templates()
+            # Ensure the directory exists and is empty
+            if os.path.exists(db_dir):
+                if self.debug_mode:
+                    st.write("🗑️ Cleaning existing database directory...")
+                import shutil
+                shutil.rmtree(db_dir)
+            os.makedirs(db_dir, exist_ok=True)
+            if self.debug_mode:
+                st.success(f"✅ Created database directory: {db_dir}")
+            
+            # Load prompt files as documents
+            documents = []
+            try:
+                files_in_dir = os.listdir(self.template_dir)
+                if self.debug_mode:
+                    st.write(f"📄 Files found in templates directory: {files_in_dir}")
+                
+                for filename in files_in_dir:
+                    if filename.endswith('.txt'):
+                        file_path = os.path.join(self.template_dir, filename)
+                        try:
+                            with open(file_path, 'r') as f:
+                                content = f.read()
+                            
+                            # Store the prompt type in metadata
+                            prompt_type = filename.replace('.txt', '')
+                            
+                            doc = Document(
+                                page_content=content,
+                                metadata={
+                                    "source": filename,
+                                    "type": prompt_type
+                                }
+                            )
+                            documents.append(doc)
+                            if self.debug_mode:
+                                st.write(f"✅ Loaded prompt file: {filename}")
+                                st.write(f"   - Prompt type: {prompt_type}")
+                                st.write(f"   - Content length: {len(content)} characters")
+                        except Exception as e:
+                            st.error(f"❌ Error reading prompt file {filename}: {str(e)}")
+            except Exception as e:
+                st.error(f"❌ Error listing files in templates directory: {str(e)}")
             
             # If no documents were loaded, raise an exception
             if not documents:
-                raise ValueError("No template documents were loaded")
+                st.error("❌ No prompt files were loaded")
+                raise ValueError("No prompt files were loaded")
+            
+            if self.debug_mode:
+                st.write(f"📊 Total documents loaded: {len(documents)}")
+                st.write("📋 Document types loaded:")
+                for doc in documents:
+                    st.write(f"   - {doc.metadata['type']} ({doc.metadata['source']})")
                 
             # Check if embeddings are working properly
             try:
+                if self.debug_mode:
+                    st.write("🧪 Testing embeddings for vector store...")
                 test_result = self.embeddings.embed_query("test")
                 if not test_result or len(test_result) == 0:
+                    st.error("❌ Failed to generate embeddings - empty result")
                     raise ValueError("Failed to generate embeddings - empty result")
+                if self.debug_mode:
+                    st.success(f"✅ Embeddings test successful (vector length: {len(test_result)})")
             except Exception as emb_error:
-                st.error(f"Embeddings test failed: {str(emb_error)}. Will use direct template access instead.")
+                st.error(f"❌ Embeddings test failed: {str(emb_error)}. Will use direct prompt approach instead.")
                 self.vector_store = None
                 return
-                
+            
+            if self.debug_mode:
+                st.write("✂️ Splitting documents...")
             splits = self.text_splitter.split_documents(documents)
             
             # If there are no splits, raise an exception
             if not splits:
+                st.error("❌ No document splits were created")
                 raise ValueError("No document splits were created")
+            
+            if self.debug_mode:
+                st.write(f"📊 Document splits created: {len(splits)}")
+                st.write("📋 Split sizes:")
+                for i, split in enumerate(splits):
+                    st.write(f"   - Split {i+1}: {len(split.page_content)} characters")
                 
-            # Use persistent storage for the vector database
-            # Chroma 0.4.x+ automatically persists documents
-            self.vector_store = Chroma.from_documents(
-                documents=splits,
-                embedding=self.embeddings,
-                persist_directory=db_dir
-            )
+                st.write("📚 Creating vector store...")
+            
+            try:
+                # Use persistent storage for the vector database
+                self.vector_store = Chroma.from_documents(
+                    documents=splits,
+                    embedding=self.embeddings,
+                    persist_directory=db_dir
+                )
+                
+                # Explicitly persist the database
+                self.vector_store.persist()
+                
+                if self.debug_mode:
+                    st.success("✅ Vector store initialized successfully")
+                    st.write(f"📊 Total vectors in store: {self.vector_store._collection.count()}")
+                    
+                    # Check database directory contents
+                    db_contents = os.listdir(db_dir)
+                    st.write(f"📁 Database directory contents: {db_contents}")
+                    if not db_contents:
+                        st.error("❌ Database directory is empty after initialization")
+                    else:
+                        st.success(f"✅ Database files created: {len(db_contents)}")
+                        
+                    # Verify the collection exists
+                    if hasattr(self.vector_store, '_collection'):
+                        st.success("✅ Chroma collection exists")
+                        st.write(f"📊 Collection count: {self.vector_store._collection.count()}")
+                    else:
+                        st.error("❌ Chroma collection not found")
+                        
+            except Exception as chroma_error:
+                st.error(f"❌ Error creating Chroma database: {str(chroma_error)}")
+                self.vector_store = None
+                return
             
         except Exception as e:
-            st.error(f"Error initializing vector store: {str(e)}")
+            st.error(f"❌ Error initializing vector store: {str(e)}")
             # Set vector_store to None to indicate fallback mode
             self.vector_store = None
 
@@ -632,19 +688,25 @@ class TerraformRAGEngine:
     def generate_terraform(self, query: str) -> Dict[str, str]:
         """Generate Terraform configuration using RAG."""
         try:
+            st.write("🔍 Processing query...")
+            st.write(f"📝 Query: {query}")
+            
             # First, validate the query
             is_valid, reason = self._validate_query(query)
             if not is_valid:
+                st.error(f"❌ Query validation failed: {reason}")
                 raise ValueError(f"Query is out of scope: {reason}")
-
+            st.success("✅ Query validated successfully")
+            
             # Check if this is a resource group request
             is_resource_group_request = "resource group" in query.lower()
-            
-            # Check if this is a storage account request
             is_storage_account_request = "storage account" in query.lower() or "storage accounts" in query.lower()
-            
-            # Check if this is a Key Vault request
             is_key_vault_request = "key vault" in query.lower() or "keyvault" in query.lower()
+            
+            st.write("🔍 Determining resource type...")
+            st.write(f"   - Resource Group Request: {is_resource_group_request}")
+            st.write(f"   - Storage Account Request: {is_storage_account_request}")
+            st.write(f"   - Key Vault Request: {is_key_vault_request}")
             
             # Updated to return a dictionary with all configurations
             result = {
@@ -654,23 +716,26 @@ class TerraformRAGEngine:
             
             # Handling resource group requests directly with the prompt-based approach
             if is_resource_group_request:
-                # For resource groups, we need both the resource group and Entra groups configs
+                st.write("🔄 Generating resource group configuration...")
                 configs = self._generate_resource_group_config(query)
                 result["configs"].append({
                     "type": "resource_group",
                     "content": configs["tfvars"],
                     "filename": configs["tfvars_filename"]
                 })
+                st.success("✅ Resource group configuration generated")
                 
                 # Check if role assignments are present and generate Entra groups
                 role_assignments_match = re.search(r'role_assignments\s*=\s*{([^}]*)}', configs['tfvars'], re.DOTALL)
                 if role_assignments_match and role_assignments_match.group(1).strip():
+                    st.write("🔄 Generating Entra groups configuration...")
                     entra_configs = self._generate_entra_groups_config(configs['tfvars'])
                     result["configs"].append({
                         "type": "entra_groups",
                         "content": entra_configs["tfvars"],
                         "filename": entra_configs["tfvars_filename"]
                     })
+                    st.success("✅ Entra groups configuration generated")
                 
                 # For backwards compatibility, return the combined config as a string
                 combined = ""

@@ -7,9 +7,9 @@ from .base_agent import BaseAgent
 class KeyVaultAgent(BaseAgent):
     """Agent specialized in generating Terraform configurations for Azure Key Vaults."""
     
-    def __init__(self, templates_dir: str):
+    def __init__(self, templates_dir: str, debug_mode: bool = False):
         """Initialize the key vault agent."""
-        super().__init__(templates_dir)
+        super().__init__(templates_dir, debug_mode)
         self.prompt_file = "key_vault_prompt.txt"
     
     def _ensure_kv_prefix(self, name: str) -> str:

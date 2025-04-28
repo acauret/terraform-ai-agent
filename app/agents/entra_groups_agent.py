@@ -7,9 +7,9 @@ from .base_agent import BaseAgent
 class EntraGroupsAgent(BaseAgent):
     """Agent specialized in generating Terraform configurations for Azure Entra ID Groups based on role assignments."""
     
-    def __init__(self, template_dir: str):
+    def __init__(self, template_dir: str, debug_mode: bool = False):
         """Initialize the Entra groups agent."""
-        super().__init__(template_dir)
+        super().__init__(template_dir, debug_mode)
         self.prompt_file = "entra_groups_prompt.txt"
     
     def generate_config(self, role_assignments_tfvars: str) -> Dict[str, Any]:
