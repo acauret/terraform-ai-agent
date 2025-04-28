@@ -14,7 +14,7 @@ import dotenv
 from agents.agent_factory import AgentFactory
 
 # Load environment variables from the specific absolute path
-dotenv_path = r"E:\Git\GitHub\terraform-ai-agent\.env"
+dotenv_path = r"F:\Git\GitHub\terraform-ai-agent\.env"
 dotenv.load_dotenv(dotenv_path)
 st.write(f"Loading .env from: {dotenv_path}")
 st.write(f"File exists: {os.path.exists(dotenv_path)}")
