@@ -39,6 +39,8 @@ wheels/
 
 # ChromaDB
 .chroma/
+db/
+db/*
 
 # Terraform
 .terraform/
